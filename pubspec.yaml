@@ -1,0 +1,96 @@
+name: hush
+description: A personal diary app — private, expressive, offline-first.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Local Database ---
+  sqflite: ^2.3.3
+  path_provider: ^2.1.2
+
+  # --- Encryption ---
+  pointycastle: ^3.7.4
+  flutter_secure_storage: ^9.0.0
+
+  # --- Auth / Biometrics ---
+  local_auth: ^2.2.0
+
+  # --- Rich Text Editor ---
+  flutter_quill: ^11.5.0
+
+  # --- State Management ---
+  riverpod: ^2.5.1
+  flutter_riverpod: ^2.5.1
+
+  # --- Navigation ---
+  go_router: ^13.2.0
+
+  # --- UI ---
+  google_fonts: ^6.2.1
+  cupertino_icons: ^1.0.8
+
+  # --- Settings KV ---
+  shared_preferences: ^2.2.3
+
+  # --- Utilities ---
+  intl: ^0.20.0
+  uuid: ^4.4.0
+  collection: ^1.18.0
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+  path: ^1.9.0
+  page_flip: ^0.2.5+1
+  flutter_animate: ^4.5.2
+  flutter_local_notifications: ^21.0.0
+  flutter_heatmap_calendar: ^1.0.5
+  emoji_picker_flutter: ^4.4.0
+  timezone: ^0.11.0
+
+  # --- Phase 3: Export ---
+  pdf: ^3.11.0                        # PDF generation (pure Dart)
+  printing: ^5.13.2                   # PDF share sheet
+  archive: ^3.6.1                     # ZIP creation for encrypted export
+  share_plus: ^12.0.1                 # Share sheet for files
+
+  # --- Phase 3: Import ---
+  file_picker: ^8.0.6                 # Pick .md / .txt files from device
+
+  # --- Phase 3: GIF (GIPHY) ---
+  http: ^1.2.0                        # GIPHY API calls
+  cached_network_image: ^3.3.1        # Async GIF loading + caching
+
+  # --- Phase 4: Env ---
+  flutter_dotenv: ^5.1.0              # .env file for secrets (GIPHY key)
+
+  # --- Phase 5: Media ---
+  image_picker: ^1.1.2                # Pick background/cover image from gallery
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+  mockito: ^5.4.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/fonts/
+    - assets/stickers/emotions/
+    - assets/stickers/minimal/
+    - assets/themes/
+    - .env
+
+  fonts:
+    - family: Lato
+      fonts:
+        - asset: assets/fonts/Lato-Regular.ttf
+        - asset: assets/fonts/Lato-Bold.ttf
+          weight: 700
+    # Merriweather and Caveat are served via google_fonts package at runtime
