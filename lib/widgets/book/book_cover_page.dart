@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/theme_constants.dart';
 import '../../models/folder.dart';
+import '../../providers/page_style_provider.dart';
 
 /// The first page of a journal in book view.
 /// Shows the journal's cover image (if set), name, and entry count.
-class BookCoverPage extends StatelessWidget {
+class BookCoverPage extends ConsumerWidget {
   final Folder folder;
   final int entryCount;
   final HushTheme theme;
@@ -18,13 +20,14 @@ class BookCoverPage extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final hasCover = folder.coverImagePath != null &&
         File(folder.coverImagePath!).existsSync();
     final folderColor = _hexColor(folder.color);
+    final pageStyle = ref.watch(pageStyleProvider);
 
     return Container(
-      color: hasCover ? Colors.black : theme.pageBackground,
+      color: hasCover ? Colors.black : Colors.transparent,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -37,7 +40,7 @@ class BookCoverPage extends StatelessWidget {
           else
             CustomPaint(
               painter: _PageTexturePainter(
-                style: theme.pageStyle,
+                style: pageStyle,
                 lineColor: theme.pageLines,
               ),
             ),

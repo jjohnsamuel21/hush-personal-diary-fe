@@ -72,11 +72,16 @@ dependencies:
   # --- Phase 5: Media ---
   image_picker: ^1.1.2                # Pick background/cover image from gallery
 
+  # --- Phase 6: Google Auth + Shared Notes ---
+  google_sign_in: ^6.2.2              # Google OAuth sign-in flow
+  flutter_timezone: ^3.0.0            # Device timezone for accurate reminder scheduling
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.2
   mockito: ^5.4.4
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
@@ -85,6 +90,7 @@ flutter:
     - assets/stickers/emotions/
     - assets/stickers/minimal/
     - assets/themes/
+    - assets/logo/
     - .env
 
   fonts:
@@ -93,4 +99,34 @@ flutter:
         - asset: assets/fonts/Lato-Regular.ttf
         - asset: assets/fonts/Lato-Bold.ttf
           weight: 700
-    # Merriweather and Caveat are served via google_fonts package at runtime
+
+    # Bundled locally so the app works offline — no runtime font downloads.
+    - family: DM Sans
+      fonts:
+        - asset: assets/fonts/DMSans-Regular.ttf
+
+    - family: DM Serif Display
+      fonts:
+        - asset: assets/fonts/DMSerifDisplay-Regular.ttf
+        - asset: assets/fonts/DMSerifDisplay-Italic.ttf
+          style: italic
+
+    - family: Merriweather
+      fonts:
+        - asset: assets/fonts/Merriweather-Regular.ttf
+        - asset: assets/fonts/Merriweather-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Merriweather-Italic.ttf
+          style: italic
+
+    - family: Caveat
+      fonts:
+        - asset: assets/fonts/Caveat-Regular.ttf
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/logo/hush-diary-app-logo.jpeg"
+  min_sdk_android: 21
+  adaptive_icon_background: "#F7F5F0"
+  adaptive_icon_foreground: "assets/logo/hush-diary-app-logo.jpeg"

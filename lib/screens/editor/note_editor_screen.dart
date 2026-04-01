@@ -11,10 +11,14 @@ import '../../core/constants/app_constants.dart';
 import '../../core/constants/font_constants.dart';
 import '../../core/utils/text_utils.dart';
 import '../../models/note.dart';
+import '../../providers/background_provider.dart';
 import '../../providers/folder_provider.dart';
 import '../../providers/font_provider.dart';
 import '../../providers/notes_provider.dart';
+import '../../providers/page_style_provider.dart';
+import '../../core/constants/theme_constants.dart';
 import '../../services/note_service.dart';
+import '../../widgets/common/app_background.dart';
 import '../../widgets/editor/sticker_panel.dart';
 import '../../screens/gif/gif_picker_screen.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
@@ -50,6 +54,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   NoteFont _currentFont = NoteFont.merriweather;
   _PageLayout _pageLayout = _PageLayout.textOnly;
   List<String> _layoutImages = [];
+  String? _noteBgPresetId;
+  String? _noteBgImagePath;
 
   @override
   void initState() {
@@ -92,6 +98,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           font = noteFontFromString(note.fontFamily);
           _pageLayout = _PageLayout.fromString(note.pageLayout);
           _layoutImages = List<String>.from(note.layoutImages);
+          _noteBgPresetId = note.noteBgPresetId;
+          _noteBgImagePath = note.noteBgImagePath;
         } else {
           controller = QuillController.basic();
         }
@@ -113,6 +121,13 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
       _controller = controller;
       _currentFont = font;
       _editorReady = true;
+    });
+
+    // Open the keyboard immediately after the editor is laid out.
+    // Without this, the user has to tap the text area first — causing the
+    // visible lag/delay before the keyboard appears on a new entry.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
     });
   }
 
@@ -157,6 +172,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         fontFamily: _currentFont.label,
         pageLayout: _pageLayout.value,
         layoutImages: _layoutImages,
+        noteBgPresetId: _noteBgPresetId,
+        noteBgImagePath: _noteBgImagePath,
       );
       if (mounted) {
         setState(() {
@@ -173,6 +190,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         fontFamily: _currentFont.label,
         pageLayout: _pageLayout.value,
         layoutImages: _layoutImages,
+        noteBgPresetId: _noteBgPresetId,
+        noteBgImagePath: _noteBgImagePath,
       );
       if (mounted) setState(() => _existingNote = updated);
     }
@@ -330,6 +349,44 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     );
   }
 
+  // ── Entry background picker ─────────────────────────────────────────────────
+  void _openEntryBgPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _EntryBgPickerSheet(
+        currentPresetId: _noteBgPresetId,
+        currentImagePath: _noteBgImagePath,
+        onPreset: (presetId) {
+          Navigator.pop(context);
+          setState(() {
+            _noteBgPresetId = presetId;
+            _noteBgImagePath = null;
+          });
+          _autoSave();
+        },
+        onImage: (path) {
+          Navigator.pop(context);
+          setState(() {
+            _noteBgImagePath = path;
+            _noteBgPresetId = null;
+          });
+          _autoSave();
+        },
+        onClear: () {
+          Navigator.pop(context);
+          setState(() {
+            _noteBgPresetId = null;
+            _noteBgImagePath = null;
+          });
+          _autoSave();
+        },
+      ),
+    );
+  }
+
   // ── Drawing canvas ──────────────────────────────────────────────────────────
   Future<void> _openDrawingCanvas() async {
     if (_controller == null) return;
@@ -428,6 +485,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   setState(() => _advancedToolbar = !_advancedToolbar);
                 case _EditorAction.help:
                   _showFormattingHelp(context);
+                case _EditorAction.entryBg:
+                  _openEntryBgPicker();
               }
             },
             itemBuilder: (_) => [
@@ -485,6 +544,14 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
+              const PopupMenuItem(
+                value: _EditorAction.entryBg,
+                child: ListTile(
+                  leading: Icon(Icons.wallpaper_outlined),
+                  title: Text('Entry background'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
             ],
           ),
           if (_isSaving)
@@ -504,7 +571,8 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           ),
         ],
       ),
-      body: !_editorReady
+      body: AppBackgroundWrapper(
+        child: !_editorReady
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
@@ -555,21 +623,33 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 // Explicit QuillEditor with lifecycle-managed ScrollController
                 // and FocusNode avoids element tree instability on rebuilds.
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: DefaultTextStyle.merge(
-                      style: noteFontStyle(_currentFont, fontSize: 16),
-                      child: QuillEditor(
-                        controller: _controller!,
-                        scrollController: _scrollController,
-                        focusNode: _focusNode,
-                        config: const QuillEditorConfig(
-                          placeholder: "What's on your mind today?",
-                          padding: EdgeInsets.only(top: 8),
-                          embedBuilders: [LocalImageEmbedBuilder()],
+                  child: Stack(
+                    children: [
+                      // Page texture (controlled from Settings › Appearance)
+                      CustomPaint(
+                        painter: _EditorTexturePainter(
+                          style: ref.watch(pageStyleProvider),
+                          lineColor: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: DefaultTextStyle.merge(
+                          style: noteFontStyle(_currentFont, fontSize: 16),
+                          child: QuillEditor(
+                            controller: _controller!,
+                            scrollController: _scrollController,
+                            focusNode: _focusNode,
+                            config: const QuillEditorConfig(
+                              placeholder: "What's on your mind today?",
+                              padding: EdgeInsets.only(top: 8),
+                              embedBuilders: [LocalImageEmbedBuilder()],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
 
@@ -577,6 +657,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 _WordCountBar(wordCount: _wordCount, isSaving: _isSaving),
               ],
             ),
+      ),
     );
   }
 }
@@ -584,7 +665,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
 // ─────────────────────────────────────────────
 // Editor overflow-menu actions
 // ─────────────────────────────────────────────
-enum _EditorAction { layout, sticker, gif, drawing, toggleToolbar, help }
+enum _EditorAction { layout, sticker, gif, drawing, toggleToolbar, help, entryBg }
 
 // ─────────────────────────────────────────────
 // Page Layout enum
@@ -904,10 +985,12 @@ class _LayoutImageStrip extends StatelessWidget {
 
     // Collage: up to 4 images in a 2x2 grid
     final cols = images.length == 1 ? 1 : 2;
+    final rows = (images.length / cols).ceil();
+    final collageHeight = (rows * 80.0).clamp(80.0, 200.0);
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        height: height,
+        height: collageHeight,
         child: GridView.builder(
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -1105,4 +1188,204 @@ class _WordCountBar extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────
+// Entry Background Picker Bottom Sheet
+// ─────────────────────────────────────────────
+class _EntryBgPickerSheet extends StatelessWidget {
+  final String? currentPresetId;
+  final String? currentImagePath;
+  final void Function(String presetId) onPreset;
+  final void Function(String path) onImage;
+  final VoidCallback onClear;
+
+  const _EntryBgPickerSheet({
+    required this.currentPresetId,
+    required this.currentImagePath,
+    required this.onPreset,
+    required this.onImage,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final hasOverride = currentPresetId != null || currentImagePath != null;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colors.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  'ENTRY BACKGROUND',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: colors.primary,
+                  ),
+                ),
+                const Spacer(),
+                if (hasOverride)
+                  TextButton(
+                    onPressed: onClear,
+                    child: const Text('Clear override'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Overrides the global background for this entry only.',
+              style: TextStyle(fontSize: 12, color: colors.outline),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Preset grid ──
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: kBackgroundPresets.map((preset) {
+                final isSelected = preset.id == currentPresetId;
+                return GestureDetector(
+                  onTap: () => onPreset(preset.id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? colors.primary : Colors.transparent,
+                        width: 2.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: _buildPresetSwatch(preset),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Pick from photos ──
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                  border: currentImagePath != null
+                      ? Border.all(color: colors.primary, width: 2)
+                      : null,
+                ),
+                child: currentImagePath != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(
+                          File(currentImagePath!),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              Icon(Icons.broken_image_outlined, color: colors.outline, size: 20),
+                        ),
+                      )
+                    : Icon(Icons.add_photo_alternate_outlined, color: colors.outline),
+              ),
+              title: Text(currentImagePath != null ? 'Change photo' : 'Pick from photos'),
+              subtitle: currentImagePath != null
+                  ? const Text('Custom image active', style: TextStyle(fontSize: 11))
+                  : null,
+              onTap: () async {
+                final picker = ImagePicker();
+                final file = await picker.pickImage(source: ImageSource.gallery);
+                if (file != null) onImage(file.path);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPresetSwatch(BackgroundPreset preset) {
+    final bg = preset.background;
+    if (bg.type == AppBackgroundType.gradient && bg.gradientColors != null) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: bg.gradientColors!,
+          ),
+        ),
+      );
+    }
+    return Container(color: bg.color ?? const Color(0xFFF9F7F4));
+  }
+}
+
+// Paints the optional page texture behind the editor content.
+// Uses the same PageStyle enum as the book reading view.
+class _EditorTexturePainter extends CustomPainter {
+  final PageStyle style;
+  final Color lineColor;
+  const _EditorTexturePainter({required this.style, required this.lineColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (style == PageStyle.blank) return;
+    final paint = Paint()..color = lineColor.withAlpha(60)..strokeWidth = 0.7;
+    switch (style) {
+      case PageStyle.ruled:
+        for (double y = 32; y < size.height; y += 30) {
+          canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+        }
+      case PageStyle.dotted:
+        for (double y = 32; y < size.height; y += 26) {
+          for (double x = 16; x < size.width; x += 26) {
+            canvas.drawCircle(Offset(x, y), 1.1, paint..style = PaintingStyle.fill);
+          }
+        }
+      case PageStyle.grid:
+        for (double y = 32; y < size.height; y += 26) {
+          canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+        }
+        for (double x = 26; x < size.width; x += 26) {
+          canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+        }
+      case PageStyle.blank:
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EditorTexturePainter old) =>
+      old.style != style || old.lineColor != lineColor;
 }

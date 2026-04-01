@@ -6,6 +6,10 @@ import '../core/crypto/encryption_service.dart';
 import '../core/utils/text_utils.dart';
 import '../models/note.dart';
 
+// Sentinel used in updateNote so callers can distinguish "keep existing null" from
+// "explicitly clear to null" for the nullable bg fields.
+const _sentinel = Object();
+
 // All note CRUD operations go through this service.
 // The service owns the encrypt-then-save and load-then-decrypt pipeline.
 // Widgets and providers never touch encryption directly — they call NoteService.
@@ -67,6 +71,8 @@ class NoteService {
     String fontFamily = 'Merriweather',
     String pageLayout = 'text_only',
     List<String> layoutImages = const [],
+    String? noteBgPresetId,
+    String? noteBgImagePath,
   }) async {
     final now = DateTime.now();
     final payload = EncryptionService.encrypt(deltaJson, masterKey);
@@ -85,6 +91,8 @@ class NoteService {
       fontFamily: fontFamily,
       pageLayout: pageLayout,
       layoutImages: layoutImages,
+      noteBgPresetId: noteBgPresetId,
+      noteBgImagePath: noteBgImagePath,
       createdAt: now,
       updatedAt: now,
     );
@@ -107,6 +115,8 @@ class NoteService {
     String? fontFamily,
     String? pageLayout,
     List<String>? layoutImages,
+    Object? noteBgPresetId = _sentinel,
+    Object? noteBgImagePath = _sentinel,
   }) async {
     final now = DateTime.now();
     final payload = EncryptionService.encrypt(deltaJson, masterKey);
@@ -126,6 +136,8 @@ class NoteService {
       fontFamily: fontFamily,
       pageLayout: pageLayout,
       layoutImages: layoutImages,
+      noteBgPresetId: noteBgPresetId == _sentinel ? note.noteBgPresetId : noteBgPresetId as String?,
+      noteBgImagePath: noteBgImagePath == _sentinel ? note.noteBgImagePath : noteBgImagePath as String?,
       updatedAt: now,
     );
 

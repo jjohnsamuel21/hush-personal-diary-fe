@@ -148,6 +148,23 @@ class FolderService {
     );
   }
 
+  /// Sets (or clears) the per-journal reading background.
+  /// Pass null for both params to reset to global background.
+  static Future<void> setReadingBackground(
+      int folderId, {String? presetId, String? imagePath}) async {
+    final now = DateTime.now().toIso8601String();
+    await DatabaseService.instance.update(
+      'folders',
+      {
+        'reading_bg_preset_id': presetId,
+        'reading_bg_image_path': imagePath,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [folderId],
+    );
+  }
+
   static Future<int> _nextSortOrder(dynamic db) async {
     final result = await db.rawQuery(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM folders',
@@ -167,6 +184,8 @@ extension FolderCopyWith on Folder {
     bool? isLocked,
     String? encryptedFolderKey,
     String? coverImagePath,
+    String? readingBgPresetId,
+    String? readingBgImagePath,
     int? sortOrder,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -179,6 +198,8 @@ extension FolderCopyWith on Folder {
       isLocked: isLocked ?? this.isLocked,
       encryptedFolderKey: encryptedFolderKey ?? this.encryptedFolderKey,
       coverImagePath: coverImagePath ?? this.coverImagePath,
+      readingBgPresetId: readingBgPresetId ?? this.readingBgPresetId,
+      readingBgImagePath: readingBgImagePath ?? this.readingBgImagePath,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

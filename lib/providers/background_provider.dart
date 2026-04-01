@@ -122,3 +122,102 @@ final backgroundProvider =
     StateNotifierProvider<BackgroundNotifier, AppBackground>(
   (ref) => BackgroundNotifier(),
 );
+
+// ── Background luminance helpers ─────────────────────────────────────────────
+// Returns the single most-representative color of an AppBackground.
+// Used to decide whether overlaid text should be light or dark.
+Color? dominantColor(AppBackground bg) {
+  switch (bg.type) {
+    case AppBackgroundType.color:
+      return bg.color;
+    case AppBackgroundType.gradient:
+      if (bg.gradientColors == null || bg.gradientColors!.isEmpty) return null;
+      final c0 = bg.gradientColors![0];
+      final c1 = bg.gradientColors![1];
+      // Average of the two stops gives a reasonable mid-point
+      return Color.fromARGB(
+        255,
+        (c0.red + c1.red) ~/ 2,
+        (c0.green + c1.green) ~/ 2,
+        (c0.blue + c1.blue) ~/ 2,
+      );
+    case AppBackgroundType.image:
+      return null; // unknown — caller keeps existing theme colors
+  }
+}
+
+/// Returns true when light (white-ish) text is needed on this background.
+/// [defaultIsLight] used when the background color is unknowable (images).
+bool needsLightText(AppBackground bg, {bool defaultIsLight = false}) {
+  final color = dominantColor(bg);
+  if (color == null) return defaultIsLight;
+  return color.computeLuminance() < 0.35;
+}
+
+/// Adapt a [ThemeData] so that all text/icon colors are readable on [bg].
+/// For solid colors and gradients the luminance is computed; for images the
+/// theme is returned unchanged (the semi-transparent overlay handles contrast).
+ThemeData adaptThemeForBackground(ThemeData theme, AppBackground bg) {
+  final color = dominantColor(bg);
+  if (color == null) return theme; // image bg — can't know, keep as-is
+
+  final lightBg = color.computeLuminance() > 0.35;
+  final textColor  = lightBg ? const Color(0xFF1A1A1A) : const Color(0xFFF2F0EB);
+  final subColor   = lightBg ? const Color(0xFF5A5A5A) : const Color(0xFFB0ADA8);
+
+  return theme.copyWith(
+    colorScheme: theme.colorScheme.copyWith(
+      onSurface: textColor,
+      onSurfaceVariant: subColor,
+      outline: subColor,
+      outlineVariant: subColor.withValues(alpha: 0.4),
+    ),
+    textTheme: theme.textTheme.apply(
+      bodyColor: textColor,
+      displayColor: textColor,
+    ),
+  );
+}
+
+// ── Note background resolution ────────────────────────────────────────────────
+// Returns the effective AppBackground for a specific entry's view/read mode.
+// Priority: note image → note preset → journal-level → global backgroundProvider.
+AppBackground resolveNoteBackground({
+  required String? noteBgPresetId,
+  required String? noteBgImagePath,
+  required AppBackground journalOrGlobalBackground,
+}) {
+  if (noteBgImagePath != null && noteBgImagePath.isNotEmpty && File(noteBgImagePath).existsSync()) {
+    return AppBackground.image(noteBgImagePath);
+  }
+  if (noteBgPresetId != null && noteBgPresetId.isNotEmpty) {
+    try {
+      final preset = kBackgroundPresets.firstWhere((p) => p.id == noteBgPresetId);
+      return preset.background;
+    } catch (_) {}
+  }
+  return journalOrGlobalBackground;
+}
+
+// ── Journal background resolution ────────────────────────────────────────────
+// Returns the effective AppBackground for a journal's reading view.
+// Priority: journal-specific (preset or image) → global backgroundProvider.
+AppBackground resolveJournalBackground({
+  required String? presetId,
+  required String? imagePath,
+  required AppBackground globalBackground,
+}) {
+  // Custom image background takes highest priority
+  if (imagePath != null && imagePath.isNotEmpty && File(imagePath).existsSync()) {
+    return AppBackground.image(imagePath);
+  }
+  // Preset background
+  if (presetId != null && presetId.isNotEmpty) {
+    try {
+      final preset = kBackgroundPresets.firstWhere((p) => p.id == presetId);
+      return preset.background;
+    } catch (_) {}
+  }
+  // Fall back to global setting
+  return globalBackground;
+}

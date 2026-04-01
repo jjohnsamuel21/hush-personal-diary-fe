@@ -49,22 +49,17 @@ class _LockScreenState extends ConsumerState<LockScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // App logo / wordmark
-                Icon(
-                  Icons.book_rounded,
-                  size: 80,
-                  color: colors.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Hush',
-                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colors.primary,
-                    letterSpacing: 4,
+                // App logo
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Image.asset(
+                    'assets/logo/hush-diary-app-logo.jpeg',
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.cover,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
                 Text(
                   'Your private diary',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(

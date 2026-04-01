@@ -37,146 +37,84 @@ class HushTheme {
   });
 }
 
-// All available themes. ThemePicker displays this list.
+// Four curated mood themes — each with full color + font coordination.
+// Design principle: each theme has a distinct mood, cohesive palette, and
+// editorial font pairing (DM Serif Display headings + DM Sans body).
 const List<HushTheme> kHushThemes = [
+
+  // ── Hush ─────────────────────────────────────────────────────────────────
+  // Warm cream + sage green — inspired by the logo palette.
+  // Calm, editorial, timeless. The default.
   HushTheme(
-    id: 'classic-light',
-    name: 'Classic',
-    background: Color(0xFFF9F7F4),
+    id: 'hush',
+    name: 'Hush',
+    background: Color(0xFFF7F5F0),   // warm off-white cream
     surface: Color(0xFFFFFFFF),
-    primary: Color(0xFF5C6BC0),
-    accent: Color(0xFF7986CB),
-    textPrimary: Color(0xFF212121),
-    textSecondary: Color(0xFF757575),
-    pageBackground: Color(0xFFFFFDE7),
-    pageLines: Color(0xFFE0D7C5),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.ruled,
+    primary: Color(0xFF4A7B5F),      // sage green (logo color)
+    accent: Color(0xFFC9A96E),       // warm gold (logo color)
+    textPrimary: Color(0xFF2D2D2D),  // dark charcoal (logo color)
+    textSecondary: Color(0xFF7A7A6A),
+    pageBackground: Color(0xFFFDFBF7),
+    pageLines: Color(0xFFE8E2D9),
+    bodyFont: 'DM Sans',
+    headingFont: 'DM Serif Display',
+    pageStyle: PageStyle.blank,
   ),
+
+  // ── Midnight ─────────────────────────────────────────────────────────────
+  // Deep navy + warm gold — noir, intimate, sophisticated.
   HushTheme(
     id: 'midnight',
     name: 'Midnight',
-    background: Color(0xFF121212),
-    surface: Color(0xFF1E1E1E),
-    primary: Color(0xFF7C4DFF),
-    accent: Color(0xFFB39DDB),
-    textPrimary: Color(0xFFE0E0E0),
-    textSecondary: Color(0xFF9E9E9E),
-    pageBackground: Color(0xFF1A1A2E),
-    pageLines: Color(0xFF2A2A3E),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.ruled,
+    background: Color(0xFF0F1117),   // near-black navy
+    surface: Color(0xFF1A1D26),      // dark surface
+    primary: Color(0xFFC9A96E),      // warm gold — accent on dark
+    accent: Color(0xFFE8C98A),       // lighter gold
+    textPrimary: Color(0xFFF0EDE8),  // warm white
+    textSecondary: Color(0xFF8A8A9A),
+    pageBackground: Color(0xFF12151E),
+    pageLines: Color(0xFF1E2133),
+    bodyFont: 'DM Sans',
+    headingFont: 'DM Serif Display',
+    pageStyle: PageStyle.blank,
   ),
-  HushTheme(
-    id: 'parchment',
-    name: 'Parchment',
-    background: Color(0xFFF5ECD7),
-    surface: Color(0xFFEDE0C4),
-    primary: Color(0xFF795548),
-    accent: Color(0xFFA1887F),
-    textPrimary: Color(0xFF3E2723),
-    textSecondary: Color(0xFF6D4C41),
-    pageBackground: Color(0xFFFFF8E1),
-    pageLines: Color(0xFFD7CCC8),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.ruled,
-  ),
-  HushTheme(
-    id: 'sakura',
-    name: 'Sakura',
-    background: Color(0xFFFCE4EC),
-    surface: Color(0xFFF8BBD9),
-    primary: Color(0xFFE91E63),
-    accent: Color(0xFFF48FB1),
-    textPrimary: Color(0xFF212121),
-    textSecondary: Color(0xFF757575),
-    pageBackground: Color(0xFFFFF0F5),
-    pageLines: Color(0xFFF8BBD9),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.dotted,
-  ),
-  HushTheme(
-    id: 'ocean',
-    name: 'Ocean',
-    background: Color(0xFFE3F2FD),
-    surface: Color(0xFFBBDEFB),
-    primary: Color(0xFF1565C0),
-    accent: Color(0xFF42A5F5),
-    textPrimary: Color(0xFF0D1B2A),
-    textSecondary: Color(0xFF37474F),
-    pageBackground: Color(0xFFF0F8FF),
-    pageLines: Color(0xFFB3D9F7),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.ruled,
-  ),
+
+  // ── Forest ────────────────────────────────────────────────────────────────
+  // Deep greens + amber — earthy, grounded, organic.
   HushTheme(
     id: 'forest',
     name: 'Forest',
-    background: Color(0xFFE8F5E9),
-    surface: Color(0xFFC8E6C9),
-    primary: Color(0xFF2E7D32),
-    accent: Color(0xFF66BB6A),
-    textPrimary: Color(0xFF1B2A1C),
-    textSecondary: Color(0xFF388E3C),
-    pageBackground: Color(0xFFF1F8F1),
-    pageLines: Color(0xFFC8E6C9),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.ruled,
+    background: Color(0xFFF0F7EE),   // pale sage
+    surface: Color(0xFFFFFFFF),
+    primary: Color(0xFF2D6A4F),      // deep forest green
+    accent: Color(0xFF74C69D),       // fresh mint
+    textPrimary: Color(0xFF1A2E20),  // near-black green
+    textSecondary: Color(0xFF52796F),
+    pageBackground: Color(0xFFF5FBF3),
+    pageLines: Color(0xFFCAE6C8),
+    bodyFont: 'DM Sans',
+    headingFont: 'DM Serif Display',
+    pageStyle: PageStyle.blank,
   ),
+
+  // ── Ocean ─────────────────────────────────────────────────────────────────
+  // Slate blue + cyan — serene, coastal, clear-headed.
   HushTheme(
-    id: 'slate',
-    name: 'Slate',
-    background: Color(0xFF263238),
-    surface: Color(0xFF37474F),
-    primary: Color(0xFF80CBC4),
-    accent: Color(0xFF4DB6AC),
-    textPrimary: Color(0xFFECEFF1),
-    textSecondary: Color(0xFFB0BEC5),
-    pageBackground: Color(0xFF2C3E50),
-    pageLines: Color(0xFF3A4F5E),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.ruled,
-  ),
-  HushTheme(
-    id: 'rose-gold',
-    name: 'Rose Gold',
-    background: Color(0xFFFFF5F7),
-    surface: Color(0xFFFFE4E8),
-    primary: Color(0xFFB5838D),
-    accent: Color(0xFFE8A0A8),
-    textPrimary: Color(0xFF3D2B2D),
-    textSecondary: Color(0xFF8B6163),
-    pageBackground: Color(0xFFFFF0F2),
-    pageLines: Color(0xFFF5C6CB),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
-    pageStyle: PageStyle.dotted,
-  ),
-  HushTheme(
-    id: 'noir',
-    name: 'Noir',
-    background: Color(0xFF0A0A0A),
-    surface: Color(0xFF141414),
-    primary: Color(0xFFFFFFFF),
-    accent: Color(0xFFCCCCCC),
-    textPrimary: Color(0xFFFFFFFF),
-    textSecondary: Color(0xFF888888),
-    pageBackground: Color(0xFF0F0F0F),
-    pageLines: Color(0xFF1A1A1A),
-    bodyFont: 'Merriweather',
-    headingFont: 'Lato',
+    id: 'ocean',
+    name: 'Ocean',
+    background: Color(0xFFEEF4FB),   // pale sky blue
+    surface: Color(0xFFFFFFFF),
+    primary: Color(0xFF0277BD),      // deep ocean blue
+    accent: Color(0xFF29B6F6),       // bright cyan
+    textPrimary: Color(0xFF0D1B2A),  // deep navy
+    textSecondary: Color(0xFF455A6A),
+    pageBackground: Color(0xFFF5FAFE),
+    pageLines: Color(0xFFB8D8F0),
+    bodyFont: 'DM Sans',
+    headingFont: 'DM Serif Display',
     pageStyle: PageStyle.blank,
   ),
 ];
 
 // The default theme used on first launch
-// Note: can't index a const list in a const expression in Dart,
-// so this is declared as a regular final variable.
-final HushTheme kDefaultTheme = kHushThemes[0]; // Classic
+final HushTheme kDefaultTheme = kHushThemes[0]; // Hush

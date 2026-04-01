@@ -10,6 +10,9 @@ import '../screens/search/search_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/tags/tag_management_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
+import '../screens/shared/invites_screen.dart';
+import '../screens/shared/manage_collaborators_screen.dart';
+import '../screens/shared/shared_note_editor_screen.dart';
 import '../screens/viewer/note_viewer_screen.dart';
 
 // Overridden at startup in main.dart once SharedPreferences is read.
@@ -96,9 +99,28 @@ GoRouter createRouter(Ref ref) {
         routes: [
           GoRoute(
             path: 'tags',
-            pageBuilder: (_, state) => _fadePage(state, const TagManagementScreen()),
+            pageBuilder: (_, state) =>
+                _fadePage(state, const TagManagementScreen()),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/shared/editor',
+        pageBuilder: (_, state) {
+          final noteId = state.uri.queryParameters['noteId'];
+          return _fadePage(state, SharedNoteEditorScreen(noteId: noteId));
+        },
+      ),
+      GoRoute(
+        path: '/shared/manage',
+        pageBuilder: (_, state) {
+          final noteId = state.uri.queryParameters['noteId'] ?? '';
+          return _fadePage(state, ManageCollaboratorsScreen(noteId: noteId));
+        },
+      ),
+      GoRoute(
+        path: '/shared/invites',
+        pageBuilder: (_, state) => _fadePage(state, const InvitesScreen()),
       ),
     ],
   );

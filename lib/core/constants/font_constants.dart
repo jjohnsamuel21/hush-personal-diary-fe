@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // The three diary fonts supported by Hush.
-// Merriweather and Caveat are served by google_fonts at runtime (cached after
-// first download). Lato is bundled as a local asset.
+// All fonts are bundled as local assets in assets/fonts/ — no internet required.
 enum NoteFont {
   merriweather('Merriweather', 'Serif — classic reading feel'),
   lato('Lato', 'Sans-serif — clean and modern'),
@@ -15,34 +13,19 @@ enum NoteFont {
 }
 
 // Returns a TextStyle using the given NoteFont.
-// Pass [fontSize] and [color] to override defaults.
+// All fonts resolve from bundled assets — works offline on first launch.
 TextStyle noteFontStyle(
   NoteFont font, {
   double fontSize = 16,
   Color? color,
   FontWeight fontWeight = FontWeight.normal,
 }) {
-  switch (font) {
-    case NoteFont.merriweather:
-      return GoogleFonts.merriweather(
-        fontSize: fontSize,
-        color: color,
-        fontWeight: fontWeight,
-      );
-    case NoteFont.lato:
-      return TextStyle(
-        fontFamily: 'Lato',
-        fontSize: fontSize,
-        color: color,
-        fontWeight: fontWeight,
-      );
-    case NoteFont.caveat:
-      return GoogleFonts.caveat(
-        fontSize: fontSize,
-        color: color,
-        fontWeight: fontWeight,
-      );
-  }
+  return TextStyle(
+    fontFamily: font.label,   // matches the family name declared in pubspec.yaml
+    fontSize: fontSize,
+    color: color,
+    fontWeight: fontWeight,
+  );
 }
 
 // SharedPreferences key for the globally selected font.

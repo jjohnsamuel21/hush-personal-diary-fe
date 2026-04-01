@@ -295,8 +295,10 @@ class _NoteContextMenu extends ConsumerWidget {
                   leading: const Icon(Icons.folder_outlined),
                   title: Text(f.name),
                   onTap: () async {
+                    final targetId = f.id;
+                    if (targetId == null) return;
                     Navigator.pop(context);
-                    await notifier.moveToFolder(note, f.id!);
+                    await notifier.moveToFolder(note, targetId);
                   },
                 )),
             const SizedBox(height: 8),

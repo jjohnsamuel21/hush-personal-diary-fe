@@ -14,7 +14,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 7,
+      version: 9,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -92,6 +92,38 @@ class DatabaseService {
         'ALTER TABLE folders ADD COLUMN reading_bg_image_path TEXT',
       );
     }
+    if (oldVersion < 9) {
+      // Per-entry background override.
+      // note_bg_preset_id: a preset id from kBackgroundPresets (null = no override)
+      // note_bg_image_path: absolute path for a custom image (null = no override)
+      await db.execute(
+        'ALTER TABLE notes ADD COLUMN note_bg_preset_id TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE notes ADD COLUMN note_bg_image_path TEXT',
+      );
+    }
+    if (oldVersion < 8) {
+      // Local cache for shared notes pulled from the backend.
+      // These are intentionally NOT encrypted — shared notes are plaintext on the server.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS shared_notes (
+          id                   TEXT PRIMARY KEY,
+          owner_email          TEXT NOT NULL,
+          owner_display_name   TEXT,
+          owner_avatar_url     TEXT,
+          title                TEXT NOT NULL,
+          body                 TEXT NOT NULL,
+          font_family          TEXT NOT NULL DEFAULT 'Merriweather',
+          cover_color          TEXT NOT NULL DEFAULT '#5C6BC0',
+          is_archived          INTEGER NOT NULL DEFAULT 0,
+          my_permission        TEXT NOT NULL DEFAULT 'owner',
+          collaborators_json   TEXT,
+          server_updated_at    TEXT NOT NULL,
+          synced_at            TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   // Called once when the database file is first created.
@@ -114,10 +146,12 @@ class DatabaseService {
         font_family      TEXT NOT NULL DEFAULT 'Merriweather',
         page_number      INTEGER NOT NULL DEFAULT 0,
         sort_order       INTEGER NOT NULL DEFAULT 0,
-        page_layout      TEXT NOT NULL DEFAULT 'text_only',
-        layout_images    TEXT,
-        created_at       TEXT NOT NULL,
-        updated_at       TEXT NOT NULL
+        page_layout          TEXT NOT NULL DEFAULT 'text_only',
+        layout_images        TEXT,
+        note_bg_preset_id    TEXT,
+        note_bg_image_path   TEXT,
+        created_at           TEXT NOT NULL,
+        updated_at           TEXT NOT NULL
       )
     ''');
 
@@ -154,6 +188,24 @@ class DatabaseService {
         PRIMARY KEY (note_id, tag_id),
         FOREIGN KEY (note_id) REFERENCES notes(id)  ON DELETE CASCADE,
         FOREIGN KEY (tag_id)  REFERENCES tags(id)   ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE shared_notes (
+        id                   TEXT PRIMARY KEY,
+        owner_email          TEXT NOT NULL,
+        owner_display_name   TEXT,
+        owner_avatar_url     TEXT,
+        title                TEXT NOT NULL,
+        body                 TEXT NOT NULL,
+        font_family          TEXT NOT NULL DEFAULT 'Merriweather',
+        cover_color          TEXT NOT NULL DEFAULT '#5C6BC0',
+        is_archived          INTEGER NOT NULL DEFAULT 0,
+        my_permission        TEXT NOT NULL DEFAULT 'owner',
+        collaborators_json   TEXT,
+        server_updated_at    TEXT NOT NULL,
+        synced_at            TEXT NOT NULL
       )
     ''');
 

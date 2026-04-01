@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+// Sentinel for nullable fields in copyWith — distinguishes "omitted" from "set to null".
+const _unset = Object();
+
 // Plain Dart class — no code generation needed with sqflite.
 // toMap() serializes to a Map for DB storage.
 // fromMap() deserializes from a DB row back to a Note object.
@@ -30,6 +33,11 @@ class Note {
   // Absolute file paths for layout images (up to 4), JSON-encoded list
   final List<String> layoutImages;
 
+  // Entry-specific background.
+  // Priority when reading: noteBgImagePath → noteBgPresetId → journal bg → global bg
+  final String? noteBgPresetId;    // a preset id from kBackgroundPresets (nullable = no override)
+  final String? noteBgImagePath;   // absolute path for a custom image (nullable = no override)
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -51,11 +59,12 @@ class Note {
     this.sortOrder = 0,
     this.pageLayout = 'text_only',
     this.layoutImages = const [],
+    this.noteBgPresetId,
+    this.noteBgImagePath,
     required this.createdAt,
     required this.updatedAt,
   });
 
-  // Returns a copy of this Note with specified fields replaced.
   Note copyWith({
     int? id,
     int? folderId,
@@ -74,6 +83,9 @@ class Note {
     int? sortOrder,
     String? pageLayout,
     List<String>? layoutImages,
+    // Use Object? + _unset sentinel so callers can explicitly set these to null.
+    Object? noteBgPresetId = _unset,
+    Object? noteBgImagePath = _unset,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -95,6 +107,8 @@ class Note {
       sortOrder: sortOrder ?? this.sortOrder,
       pageLayout: pageLayout ?? this.pageLayout,
       layoutImages: layoutImages ?? this.layoutImages,
+      noteBgPresetId: noteBgPresetId == _unset ? this.noteBgPresetId : noteBgPresetId as String?,
+      noteBgImagePath: noteBgImagePath == _unset ? this.noteBgImagePath : noteBgImagePath as String?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -119,6 +133,8 @@ class Note {
       'sort_order': sortOrder,
       'page_layout': pageLayout,
       'layout_images': layoutImages.isEmpty ? null : jsonEncode(layoutImages),
+      'note_bg_preset_id': noteBgPresetId,
+      'note_bg_image_path': noteBgImagePath,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -150,6 +166,8 @@ class Note {
       sortOrder: (map['sort_order'] as int?) ?? 0,
       pageLayout: (map['page_layout'] as String?) ?? 'text_only',
       layoutImages: images,
+      noteBgPresetId: map['note_bg_preset_id'] as String?,
+      noteBgImagePath: map['note_bg_image_path'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );

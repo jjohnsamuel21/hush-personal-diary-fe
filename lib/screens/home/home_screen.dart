@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../models/folder.dart';
 import '../../models/note.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/folder_provider.dart';
 import '../../providers/notes_provider.dart';
+import '../../providers/shared_notes_provider.dart';
+import '../../screens/shared/shared_notes_screen.dart';
 import '../../services/folder_service.dart';
 import '../../services/note_service.dart';
 import '../../widgets/common/app_background.dart';
@@ -26,7 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -39,10 +42,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Hush',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
+        leading: Padding(
+          padding: const EdgeInsets.all(10),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/logo/hush-diary-app-logo.jpeg',
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
+        title: const Text('Hush'),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -57,9 +67,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Journals'),
-            Tab(text: 'All Entries'),
+          tabs: [
+            const Tab(text: 'Journals'),
+            const Tab(text: 'All Entries'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Shared'),
+                  const SizedBox(width: 4),
+                  Consumer(builder: (_, ref, __) {
+                    final count =
+                        ref.watch(invitesProvider).valueOrNull?.length ?? 0;
+                    if (count == 0) return const SizedBox.shrink();
+                    return Badge(
+                      label: Text('$count'),
+                      child: const SizedBox(width: 6),
+                    );
+                  }),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -69,6 +97,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             _FolderGridTab(onFolderTap: _openFolder, onCreateFolder: _showCreateFolder),
             _AllNotesTab(),
+            _SharedTab(),
           ],
         ),
       ),
@@ -874,6 +903,78 @@ class _SetPinDialogState extends State<_SetPinDialog> {
         FilledButton(
           onPressed: _save,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Shared tab ────────────────────────────────────────────────────────────────
+
+class _SharedTab extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSignedIn = ref.watch(isGoogleSignedInProvider);
+    final colors = Theme.of(context).colorScheme;
+
+    if (!isSignedIn) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.people_outline_rounded,
+                  size: 64, color: colors.outlineVariant),
+              const SizedBox(height: 20),
+              Text(
+                'Shared Notes',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: colors.onSurface),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Sign in with Google to create and collaborate on shared notes.',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(fontSize: 14, color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 28),
+              FilledButton.icon(
+                icon: const Icon(Icons.login_rounded),
+                label: const Text('Sign in with Google'),
+                onPressed: () async {
+                  final ok = await ref
+                      .read(authProvider.notifier)
+                      .signIn();
+                  if (!ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Sign-in failed or cancelled')),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        const SharedNotesScreen(),
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            heroTag: 'fab_shared',
+            onPressed: () => context.push('/shared/editor'),
+            tooltip: 'New shared note',
+            child: const Icon(Icons.add),
+          ),
         ),
       ],
     );

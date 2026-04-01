@@ -3,19 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/background_provider.dart';
 
-/// Wraps a child with the user-selected app background AND automatically
-/// adapts all descendant text/icon colors so any background+theme combo
-/// stays legible. For solid colors and gradients the background luminance
-/// is computed and the Theme is overridden with appropriate contrasting
-/// colors. For image backgrounds the semi-transparent overlay handles
-/// contrast and the existing theme colors are kept.
-class AppBackgroundWrapper extends ConsumerWidget {
+/// Renders the effective background for the journal reading view and adapts
+/// all descendant text/icon colors so any background stays readable.
+class JournalBackgroundWrapper extends ConsumerWidget {
+  final String? journalPresetId;
+  final String? journalImagePath;
   final Widget child;
-  const AppBackgroundWrapper({super.key, required this.child});
+
+  const JournalBackgroundWrapper({
+    super.key,
+    required this.child,
+    this.journalPresetId,
+    this.journalImagePath,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bg = ref.watch(backgroundProvider);
+    final globalBg = ref.watch(backgroundProvider);
+    final bg = resolveJournalBackground(
+      presetId: journalPresetId,
+      imagePath: journalImagePath,
+      globalBackground: globalBg,
+    );
+
     final adapted = Theme(
       data: adaptThemeForBackground(Theme.of(context), bg),
       child: child,
@@ -28,7 +38,7 @@ class AppBackgroundWrapper extends ConsumerWidget {
             fit: StackFit.expand,
             children: [
               Image.file(File(bg.imagePath!), fit: BoxFit.cover),
-              Container(color: Colors.black.withValues(alpha: 0.25)),
+              Container(color: Colors.black.withValues(alpha: 0.15)),
               adapted,
             ],
           );

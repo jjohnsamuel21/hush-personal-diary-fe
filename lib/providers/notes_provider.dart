@@ -83,10 +83,13 @@ class NotesNotifier extends StateNotifier<AsyncValue<List<Note>>> {
     _ref.invalidate(notesProvider);
   }
 
-  Future<void> moveToFolder(Note note, int folderId) async {
-    await NoteService.moveToFolder(note, folderId);
+  Future<void> moveToFolder(Note note, int targetFolderId) async {
+    final oldFolderId = note.folderId;
+    await NoteService.moveToFolder(note, targetFolderId);
     await _loadNotes();
-    _ref.invalidate(notesProvider);
+    _ref.invalidate(notesProvider(null));
+    _ref.invalidate(notesProvider(oldFolderId));
+    _ref.invalidate(notesProvider(targetFolderId));
     _ref.invalidate(foldersProvider);
   }
 

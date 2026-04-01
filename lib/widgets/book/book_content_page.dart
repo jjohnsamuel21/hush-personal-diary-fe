@@ -1,7 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants/font_constants.dart';
 import '../../core/constants/theme_constants.dart';
 import '../../models/note.dart';
+import '../../providers/background_provider.dart';
+import '../../providers/page_style_provider.dart';
+import '../../providers/typography_provider.dart';
 import '../../screens/editor/image_embed_builder.dart';
 
 // A single entry page in book view — the Kindle-style content page.
@@ -12,7 +18,7 @@ import '../../screens/editor/image_embed_builder.dart';
 //   • QuillEditor in read-only mode fills the rest — no separate chapter-header page
 //   • Scroll position feeds back to BookScreen for the progress bar
 //   • Page texture (ruled/dots/grid) painted behind the text
-class BookContentPage extends StatefulWidget {
+class BookContentPage extends ConsumerStatefulWidget {
   final Note note;
   final Document doc;
   final HushTheme theme;
@@ -31,10 +37,10 @@ class BookContentPage extends StatefulWidget {
   });
 
   @override
-  State<BookContentPage> createState() => _BookContentPageState();
+  ConsumerState<BookContentPage> createState() => _BookContentPageState();
 }
 
-class _BookContentPageState extends State<BookContentPage> {
+class _BookContentPageState extends ConsumerState<BookContentPage> {
   late QuillController _controller;
   late ScrollController _scrollController;
   late FocusNode _focusNode;
@@ -73,14 +79,75 @@ class _BookContentPageState extends State<BookContentPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: widget.theme.pageBackground,
-      child: Stack(
-        children: [
+    final pageStyle = ref.watch(pageStyleProvider);
+    final typo = ref.watch(typographyProvider);
+
+    // Global typography overrides the per-note font if set.
+    // This ensures changes in Settings › Appearance instantly apply to ALL entries.
+    final bodyFont = typo.fontFamily != 'Merriweather'
+        ? typo.fontFamily
+        : widget.note.fontFamily;
+    final bodyColor = typo.useCustomColor
+        ? typo.textColor
+        : widget.theme.textPrimary;
+    final bodySize = 17.0 * typo.fontScale;
+
+    // If the note has an entry-specific background, overlay it on top of the
+    // journal/global background that the parent JournalBackgroundWrapper provides.
+    final globalBg = ref.watch(backgroundProvider);
+    final noteBg = resolveNoteBackground(
+      noteBgPresetId: widget.note.noteBgPresetId,
+      noteBgImagePath: widget.note.noteBgImagePath,
+      journalOrGlobalBackground: globalBg,
+    );
+    final hasNoteOverride =
+        widget.note.noteBgPresetId != null || widget.note.noteBgImagePath != null;
+
+    Widget bgLayer = const SizedBox.shrink();
+    if (hasNoteOverride) {
+      switch (noteBg.type) {
+        case AppBackgroundType.image:
+          if (noteBg.imagePath != null && File(noteBg.imagePath!).existsSync()) {
+            bgLayer = Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.file(File(noteBg.imagePath!), fit: BoxFit.cover),
+                Container(color: Colors.black.withValues(alpha: 0.15)),
+              ],
+            );
+          }
+        case AppBackgroundType.gradient:
+          final gColors = noteBg.gradientColors ?? [const Color(0xFFF9F7F4), const Color(0xFFEEEEEE)];
+          bgLayer = Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gColors,
+              ),
+            ),
+          );
+        case AppBackgroundType.color:
+          bgLayer = Container(color: noteBg.color ?? const Color(0xFFF9F7F4));
+      }
+    }
+
+    return Stack(
+      children: [
+        if (hasNoteOverride) Positioned.fill(child: bgLayer),
+        _buildPage(context, pageStyle, bodyFont, bodyColor, bodySize),
+      ],
+    );
+  }
+
+  Widget _buildPage(BuildContext context, PageStyle pageStyle,
+      String bodyFont, Color bodyColor, double bodySize) {
+    return Stack(
+      children: [
           // ── Page texture layer ──────────────────────────────────────────────
           CustomPaint(
             painter: _PageTexturePainter(
-              style: widget.theme.pageStyle,
+              style: pageStyle,
               lineColor: widget.theme.pageLines,
             ),
             child: const SizedBox.expand(),
@@ -204,11 +271,12 @@ class _BookContentPageState extends State<BookContentPage> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: DefaultTextStyle.merge(
-                    style: TextStyle(
-                      fontFamily: widget.note.fontFamily,
-                      fontSize: 17,
-                      height: 1.65,            // Kindle's comfortable line spacing
-                      color: widget.theme.textPrimary,
+                    style: noteFontStyle(
+                      noteFontFromString(bodyFont),
+                      fontSize: bodySize,
+                    ).copyWith(
+                      height: 1.65,
+                      color: bodyColor,
                       letterSpacing: 0.1,
                     ),
                     child: QuillEditor(
@@ -234,7 +302,6 @@ class _BookContentPageState extends State<BookContentPage> {
             ],
           ),
         ],
-      ),
     );
   }
 

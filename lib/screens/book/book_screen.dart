@@ -5,14 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' show Document;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/auth/app_lock_notifier.dart';
 import '../../models/folder.dart';
 import '../../models/note.dart';
+import '../../providers/background_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/folder_service.dart';
 import '../../services/note_service.dart';
 import '../../widgets/book/book_content_page.dart';
 import '../../widgets/book/book_cover_page.dart';
+import '../../widgets/common/journal_background.dart';
 
 // ── BookScreen ────────────────────────────────────────────────────────────────
 // Kindle-style reading view for a journal.
@@ -159,12 +162,10 @@ class _BookScreenState extends ConsumerState<BookScreen>
     final rightZone = size.width * 0.72;
 
     if (x < leftZone) {
-      // Left tap → previous page
-      _showToolbar();
+      // Left tap → previous page only, no toolbar change
       _goToPrev();
     } else if (x > rightZone) {
-      // Right tap → next page
-      _showToolbar();
+      // Right tap → next page only, no toolbar change
       _goToNext();
     } else {
       // Center tap → toggle toolbar
@@ -241,8 +242,11 @@ class _BookScreenState extends ConsumerState<BookScreen>
     }
 
     return Scaffold(
-      backgroundColor: hushTheme.pageBackground,
-      body: Stack(
+      backgroundColor: Colors.transparent,
+      body: JournalBackgroundWrapper(
+        journalPresetId: _folder?.readingBgPresetId,
+        journalImagePath: _folder?.readingBgImagePath,
+        child: Stack(
         children: [
           // ── Page content ────────────────────────────────────────────────────
           GestureDetector(
@@ -256,7 +260,6 @@ class _BookScreenState extends ConsumerState<BookScreen>
                   _pageIndex = index;
                   _scrollFraction = 0.0;
                 });
-                _showToolbar();
               },
               itemCount: _totalPages,
               itemBuilder: (ctx, index) {
@@ -340,8 +343,52 @@ class _BookScreenState extends ConsumerState<BookScreen>
             child: _buildProgressBar(context, hushTheme),
           ),
         ],
+      ),    // Stack
+      ),    // JournalBackgroundWrapper
+    );      // Scaffold
+  }
+
+  Future<void> _showBackgroundPicker(BuildContext context, dynamic hushTheme) async {
+    _hideTimer?.cancel(); // Keep toolbar visible while sheet is open
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _JournalBgPickerSheet(
+        folder: _folder!,
+        hushTheme: hushTheme,
+        onPresetSelected: (presetId) async {
+          await FolderService.setReadingBackground(
+            _folder!.id!,
+            presetId: presetId,
+            imagePath: null,
+          );
+          final updated = await FolderService.getFolderById(_folder!.id!);
+          if (mounted) setState(() => _folder = updated);
+        },
+        onImageSelected: (path) async {
+          await FolderService.setReadingBackground(
+            _folder!.id!,
+            presetId: null,
+            imagePath: path,
+          );
+          final updated = await FolderService.getFolderById(_folder!.id!);
+          if (mounted) setState(() => _folder = updated);
+        },
+        onReset: () async {
+          await FolderService.setReadingBackground(
+            _folder!.id!,
+            presetId: null,
+            imagePath: null,
+          );
+          final updated = await FolderService.getFolderById(_folder!.id!);
+          if (mounted) setState(() => _folder = updated);
+        },
       ),
     );
+    _scheduleHide();
   }
 
   Widget _buildTopBar(BuildContext context, dynamic hushTheme) {
@@ -377,6 +424,19 @@ class _BookScreenState extends ConsumerState<BookScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              // Background picker — only shown when a specific journal is open
+              if (_folder != null)
+                IconButton(
+                  icon: Icon(
+                    Icons.palette_outlined,
+                    color: (_folder!.readingBgPresetId != null ||
+                            _folder!.readingBgImagePath != null)
+                        ? hushTheme.primary
+                        : null,
+                  ),
+                  tooltip: 'Journal background',
+                  onPressed: () => _showBackgroundPicker(context, hushTheme),
+                ),
               if (!_onCover && _entryIndex >= 0 && _entryIndex < _entries.length)
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
@@ -406,7 +466,7 @@ class _BookScreenState extends ConsumerState<BookScreen>
             ],
           ),
         ),
-      ),
+      ), // JournalBackgroundWrapper
     );
   }
 
@@ -426,7 +486,7 @@ class _BookScreenState extends ConsumerState<BookScreen>
             : '';
 
     return Container(
-      color: hushTheme.pageBackground,
+      color: Colors.transparent,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -468,6 +528,199 @@ class _BookScreenState extends ConsumerState<BookScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Journal background picker bottom sheet ────────────────────────────────────
+class _JournalBgPickerSheet extends StatelessWidget {
+  final Folder folder;
+  final dynamic hushTheme;
+  final void Function(String presetId) onPresetSelected;
+  final void Function(String path) onImageSelected;
+  final VoidCallback onReset;
+
+  const _JournalBgPickerSheet({
+    required this.folder,
+    required this.hushTheme,
+    required this.onPresetSelected,
+    required this.onImageSelected,
+    required this.onReset,
+  });
+
+  bool _isActive(BackgroundPreset preset) {
+    if (folder.readingBgPresetId == null) return false;
+    return folder.readingBgPresetId == preset.id;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final hasCustomBg =
+        folder.readingBgPresetId != null || folder.readingBgImagePath != null;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'JOURNAL BACKGROUND',
+                style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2, color: colors.primary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Overrides the global background for this journal only.',
+                style: TextStyle(fontSize: 12, color: colors.outline),
+              ),
+              const SizedBox(height: 16),
+
+              // Preset grid
+              Wrap(
+                spacing: 10, runSpacing: 10,
+                children: kBackgroundPresets.map((preset) {
+                  final isSelected = _isActive(preset);
+                  final bg = preset.background;
+                  Widget swatch;
+                  if (bg.type == AppBackgroundType.gradient) {
+                    swatch = Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: bg.gradientColors!,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? colors.primary : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                    );
+                  } else {
+                    swatch = Container(
+                      decoration: BoxDecoration(
+                        color: bg.color,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? colors.primary
+                              : colors.outlineVariant,
+                          width: isSelected ? 3 : 1,
+                        ),
+                      ),
+                    );
+                  }
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      onPresetSelected(preset.id);
+                    },
+                    child: SizedBox(
+                      width: 64,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 64, height: 48,
+                            child: swatch,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            preset.name,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isSelected
+                                  ? colors.primary
+                                  : colors.outline,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+
+              // Custom image
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Custom image from gallery'),
+                subtitle: folder.readingBgImagePath != null
+                    ? Text(
+                        folder.readingBgImagePath!.split('/').last,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: colors.primary, fontSize: 12),
+                      )
+                    : const Text('Use a photo as the reading background'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final picker = ImagePicker();
+                  final picked =
+                      await picker.pickImage(source: ImageSource.gallery);
+                  if (picked != null) onImageSelected(picked.path);
+                },
+              ),
+
+              // Reset to global
+              if (hasCustomBg) ...[
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.undo, color: colors.error),
+                  title: Text('Use global background',
+                      style: TextStyle(color: colors.error)),
+                  subtitle: const Text(
+                      'Removes this journal\'s override and uses the app-wide setting'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onReset();
+                  },
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
