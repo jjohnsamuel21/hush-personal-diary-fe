@@ -1,46 +1,92 @@
-# Miscellaneous
-*.class
+# ─── Environment / secrets ──────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.env
+
+# ─── Google Services & OAuth secrets ────────────────────────────
+# These contain API keys and OAuth client IDs — never commit them
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+android/app/client_secret_*.json
+*.client_secret.json
+
+# ─── Android signing keys ────────────────────────────────────────
+*.jks
+*.keystore
+android/key.properties
+android/app/key.properties
+android/local.properties
+
+# ─── Flutter / Dart ─────────────────────────────────────────────
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+.packages
+/build/
+/coverage/
+app.*.symbols
+app.*.map.json
+**/ios/Flutter/.last_build_id
+
+# ─── Android build artifacts ────────────────────────────────────
+android/.gradle/
+android/captures/
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ─── iOS build artifacts ────────────────────────────────────────
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/App.framework
+ios/Flutter/engine/
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/DerivedData/
+*.xcworkspace
+Podfile.lock
+
+# ─── Certificates / private keys ────────────────────────────────
+*.pem
+*.p12
+*.cer
+*.crt
+*.key
+*.pkcs12
+
+# ─── IDE ────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+migrate_working_dir/
+
+# ─── OS ─────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+
+# ─── Misc ───────────────────────────────────────────────────────
 *.log
+*.class
 *.pyc
 *.swp
-.DS_Store
 .atom/
 .build/
 .buildlog/
 .history
 .svn/
 .swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-.env
