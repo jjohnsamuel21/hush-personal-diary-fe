@@ -720,3 +720,105 @@ fvm flutter build apk --release
 | `pickMultiImage(limit: maxCount)` for collage, `pickImage` for single | `pickMultiImage` opens the system multi-select picker in one tap. `limit:` caps selection without extra validation. For single-image layouts, `pickImage` is simpler and more direct. |
 
 *Last updated: Phase 5 — Theming, backgrounds, typography, per-journal cover images, book experience, and page layouts complete.*
+
+---
+
+## Phase 7: Audio Recording, Activity Logs, Share Fixes, Theme–Background Unification
+
+### Feature 1: Voice Notes (Audio Recording)
+
+**Packages added:**
+- `record: ^6.2.0` — cross-platform microphone recording, AAC (.m4a) output
+- `just_audio: ^0.9.38` — audio playback for the inline player widget
+
+**Permissions added (AndroidManifest.xml):**
+- `android.permission.RECORD_AUDIO`
+
+**New files:**
+- `lib/services/audio_recording_service.dart` — static wrapper around `AudioRecorder`. Saves files to `{appDocuments}/audio/hush_audio_{timestamp}.m4a`. Fully offline.
+- `lib/screens/editor/audio_embed_builder.dart` — two exports:
+  - `AudioEmbedBuilder` — Quill `EmbedBuilder` for key `'audio'`. Renders an inline player (play/pause, progress slider, timestamp, delete button).
+  - `AudioRecorderSheet` — bottom sheet with a large record/stop button, elapsed timer, and pulse animation. Designed for one-hand / driving use (single tap to start, single tap to stop).
+
+**Changes to existing files:**
+- `note_editor_screen.dart`:
+  - Imports `audio_embed_builder.dart` and `activity_log_service.dart`
+  - Adds `AudioEmbedBuilder()` to `QuillEditorConfig.embedBuilders`
+  - Adds prominent `mic_rounded` IconButton in AppBar (not hidden in overflow menu — easy one-tap access)
+  - `_openAudioRecorder()` — shows `AudioRecorderSheet`; on completion inserts `BlockEmbed(kAudioEmbedKey, path)` at cursor and auto-saves
+  - Logs `'created'` / `'edited'` actions via `ActivityLogService`
+- `shared_note_editor_screen.dart` — same audio additions; also logs shared activity
+
+**Audio embed storage:**
+Audio embeds are stored as `{'insert': {'audio': '/absolute/path/to/hush_audio_xxx.m4a'}}` in the Quill Delta JSON. The path is device-local — audio is not uploaded to the server for shared notes (future enhancement).
+
+**Deletion:**
+Long-tap the ×  icon on the player widget. A confirmation dialog appears before removing the embed from the document AND deleting the file from disk.
+
+---
+
+### Feature 2: Share Invite Fix
+
+**Problem:** "Could not send invite. Try again" appeared even for valid emails because `SharedNoteService.shareNote()` returns `[]` on any network/server failure, and the UI showed a generic error.
+
+**Fix in `manage_collaborators_screen.dart`:**
+- Gate check before sending: if `noteId.startsWith('local_')` → show "Sync note first" message
+- On `result.isEmpty` → show "Could not reach server. Check your connection…" (accurate, not misleading)
+
+---
+
+### Feature 3: Activity Logs
+
+**DB migration:** v10 — new `activity_logs` table:
+```sql
+CREATE TABLE activity_logs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_type TEXT NOT NULL DEFAULT 'local',  -- 'local' | 'shared'
+  note_id      TEXT,
+  action       TEXT NOT NULL,                  -- 'created' | 'edited' | 'deleted' | 'shared' | 'audio_added' | 'invite_accepted'
+  note_title   TEXT,
+  detail       TEXT,
+  created_at   TEXT NOT NULL
+)
+```
+
+**New files:**
+- `lib/models/activity_log.dart` — `ActivityLog` model with `fromMap()`, `toMap()`, `actionLabel` getter
+- `lib/services/activity_log_service.dart` — `log()`, `getLogs()`, `getLogsByType()`, `deleteLog()`, `clearLogsByType()`, `clearAllLogs()`
+- `lib/screens/activity/activity_logs_screen.dart` — tabbed screen (All / Local / Shared), swipe-to-delete individual entries, overflow menu to clear by type or all
+
+**Route:** `/settings/activity` (nested under `/settings`)
+
+**Access:** Settings → Writing → Activity Log → "View activity log"
+
+**Privacy:** Logs are always local-only; never uploaded to the server. Each user's shared logs are independent (deleting your log doesn't affect collaborators).
+
+---
+
+### Feature 4: Theme–Background Unification
+
+**Problem:** Theme and Background were separate, so changing a theme didn't update the background — leading to mismatched visuals (e.g., Midnight theme with a light parchment background).
+
+**Fix:**
+- Added `defaultBackgroundPresetId` field to `HushTheme`:
+  - Hush → `'parchment'`
+  - Midnight → `'midnight'`
+  - Forest → `'forest'`
+  - Ocean → `'ocean'`
+- `_ThemePicker.onTap` now also calls `backgroundProvider.notifier.setPreset(...)` with the theme's default preset, **unless** the user has a custom photo active (custom photos are always preserved)
+- Added "Remove custom photo" ×  button next to the custom photo picker in `_BackgroundPresetGrid`
+
+**No coupling between providers:** The theme auto-apply happens in the settings UI, not inside `ThemeNotifier` or `BackgroundNotifier` — avoids circular dependencies.
+
+---
+
+## Phase 7 Decisions Log
+
+| Decision | Reason |
+|---|---|
+| `record: ^6.2.0` (not 5.x) | record 5.2.x has a broken sub-dependency graph (`record_linux 0.7.x` incompatible with `record_platform_interface 1.5.0`). 6.x uses `record_linux ^1.0.0` which is compatible. |
+| `kAudioEmbedKey = 'audio'` as a top-level constant | Shared between `AudioEmbedBuilder` and any code that inserts audio embeds (both editors). Prevents typo-driven mismatch between the embed type string and the builder key. |
+| Audio player in Quill embed rather than above/below editor | Inline placement means audio is part of the note's narrative flow — it can appear mid-paragraph or at the end, exactly where the user placed it. Separate strip-player can't represent multiple recordings at different positions. |
+| `isDismissible: false, enableDrag: false` on recorder sheet | Accidental swipe-to-dismiss during recording would lose the recording. The user must explicitly press Stop or Cancel. |
+| Activity logs never synced to server | Logs are personal usage metadata. Uploading them would require additional API endpoints, storage, and raises privacy questions. Local-only is consistent with the app's encrypted-private-diary philosophy. |
+| Theme auto-applies background only when no custom photo | A user's intentional photo choice should not be overridden silently. Preset presets (color/gradient) are considered "theme-managed" and safe to replace. |

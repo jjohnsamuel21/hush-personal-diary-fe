@@ -30,7 +30,7 @@ class SharedNotesNotifier
     }
   }
 
-  Future<SharedNote?> createNote({
+  Future<SharedNote> createNote({
     required String title,
     required String body,
     String fontFamily = 'Merriweather',
@@ -42,7 +42,7 @@ class SharedNotesNotifier
       fontFamily: fontFamily,
       coverColor: coverColor,
     );
-    if (note != null) _ref.invalidate(sharedNotesProvider);
+    _ref.invalidate(sharedNotesProvider);
     return note;
   }
 

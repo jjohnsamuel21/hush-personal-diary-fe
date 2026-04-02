@@ -42,25 +42,44 @@ class AuthService {
       final account = await _googleSignIn.signIn();
       if (account == null) return null;
 
-      final auth = await account.authentication;
-      final idToken = auth.idToken;
-      if (idToken == null) return null;
+      // Try backend JWT exchange first (works when backend is reachable).
+      // Falls back to building the user directly from the Google account so
+      // sign-in works on physical devices even when the dev backend is offline.
+      try {
+        final auth = await account.authentication;
+        final idToken = auth.idToken;
+        if (idToken != null) {
+          final response = await http.post(
+            Uri.parse('$_baseUrl/auth/google'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'google_id_token': idToken}),
+          ).timeout(const Duration(seconds: 6));
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/auth/google'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'google_id_token': idToken}),
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
+            final jwt = data['access_token'] as String;
+            final user =
+                AuthUser.fromJson(data['user'] as Map<String, dynamic>);
+            await _storage.write(key: _keyJwt, value: jwt);
+            await _storage.write(key: _keyUser, value: user.toJsonString());
+            return user;
+          }
+        }
+      } catch (_) {
+        // Backend unreachable (dev server, emulator-only IP, no network, etc.)
+        // Fall through to local-only sign-in below.
+      }
+
+      // Local-only: build AuthUser directly from the Google account.
+      // No JWT is stored — backend-dependant features (shared notes sync) will
+      // silently no-op until the backend is reachable.
+      final user = AuthUser(
+        id: account.id,
+        email: account.email,
+        displayName: account.displayName,
+        avatarUrl: account.photoUrl,
       );
-
-      if (response.statusCode != 200) return null;
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final jwt = data['access_token'] as String;
-      final user = AuthUser.fromJson(data['user'] as Map<String, dynamic>);
-
-      await _storage.write(key: _keyJwt, value: jwt);
       await _storage.write(key: _keyUser, value: user.toJsonString());
-
       return user;
     } catch (_) {
       return null;

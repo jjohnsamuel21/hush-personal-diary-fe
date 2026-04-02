@@ -39,6 +39,13 @@ class _ManageCollaboratorsScreenState
       return;
     }
 
+    // Cannot share a note that hasn't been synced to the server yet
+    if (widget.noteId.startsWith('local_')) {
+      setState(() => _error =
+          'This note is saved offline only. Open it once while online to sync, then you can share it.');
+      return;
+    }
+
     setState(() {
       _inviting = true;
       _error = null;
@@ -56,7 +63,8 @@ class _ManageCollaboratorsScreenState
           SnackBar(content: Text('Invite sent to $email')),
         );
       } else {
-        setState(() => _error = 'Could not send invite. Try again.');
+        setState(() => _error =
+            'Could not reach server. Check your connection and make sure the other person has a Hush account, then try again.');
       }
     }
   }

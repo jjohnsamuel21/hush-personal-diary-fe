@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import '../editor/audio_embed_builder.dart';
+import '../editor/image_embed_builder.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_lock_notifier.dart';
@@ -191,6 +193,10 @@ class _NoteViewerScreenState extends ConsumerState<NoteViewerScreen> {
                           showCursor: false,
                           padding: EdgeInsets.fromLTRB(20, 12, 20, 32),
                           autoFocus: false,
+                          embedBuilders: [
+                            LocalImageEmbedBuilder(),
+                            AudioEmbedBuilder(),
+                          ],
                         ),
                       ),
                     ),

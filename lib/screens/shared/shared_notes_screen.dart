@@ -162,7 +162,7 @@ class _SharedNoteCard extends ConsumerWidget {
 
               // ── Body preview ───────────────────────────────────────────
               Text(
-                note.body,
+                note.plainTextBody,
                 style: TextStyle(fontSize: 14, color: colors.onSurfaceVariant),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,

@@ -6,6 +6,22 @@ import '../core/database/isar_service.dart';
 import '../models/shared_note.dart';
 import 'auth_service.dart';
 
+/// Extracts plain text from a Quill Delta JSON string.
+/// Falls back to returning the original string if it is not Delta JSON.
+String _deltaToPlainText(String body) {
+  if (body.isNotEmpty && body.trimLeft().startsWith('[')) {
+    try {
+      final delta = jsonDecode(body) as List<dynamic>;
+      final buf = StringBuffer();
+      for (final op in delta) {
+        if (op is Map && op['insert'] is String) buf.write(op['insert'] as String);
+      }
+      return buf.toString().trim();
+    } catch (_) {}
+  }
+  return body;
+}
+
 /// API calls for shared notes + local SQLite cache management.
 ///
 /// All notes fetched from the server are cached in the local `shared_notes`
@@ -28,12 +44,17 @@ class SharedNoteService {
 
   /// Fetches shared notes from the server and replaces the local cache.
   /// Returns the fresh list on success, or the cached list on failure.
+  /// Any notes saved locally while offline (id starts with `local_`) are
+  /// pushed to the server first, then the cache is refreshed.
   static Future<List<SharedNote>> syncAndGetNotes() async {
+    // Push any locally-created notes to the server before fetching.
+    await _flushLocalNotes();
+
     try {
       final headers = await _authHeaders();
       final response = await http
           .get(Uri.parse('$_base/api/notes'), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final list = (jsonDecode(response.body) as List<dynamic>)
@@ -41,13 +62,53 @@ class SharedNoteService {
             .toList();
 
         await _replaceCache(list);
-        return list;
+        return getCachedNotes(); // includes any local_ notes that failed to push
       }
     } catch (_) {
       // Network failure — fall through to cached results
     }
 
     return getCachedNotes();
+  }
+
+  /// Attempts to push any locally-created (offline) notes to the server.
+  /// On success the local_ entry is replaced with the server-assigned ID.
+  static Future<void> _flushLocalNotes() async {
+    final db = DatabaseService.instance;
+    final rows = await db.query(
+      'shared_notes',
+      where: "id LIKE 'local_%'",
+    );
+    if (rows.isEmpty) return;
+
+    final headers = await _authHeaders();
+    for (final row in rows) {
+      final note = SharedNote.fromMap(row);
+      try {
+        final response = await http.post(
+          Uri.parse('$_base/api/notes'),
+          headers: headers,
+          body: jsonEncode({
+            'title': note.title,
+            'body': _deltaToPlainText(note.body),
+            'font_family': note.fontFamily,
+            'cover_color': note.coverColor,
+          }),
+        ).timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 201) {
+          // Keep the original Delta JSON body in the local cache (the server
+          // stores plain text; local cache stores Delta for rich editing).
+          final serverNote = SharedNote.fromApiJson(
+              jsonDecode(response.body) as Map<String, dynamic>)
+              .copyWith(body: note.body);
+          await db.delete('shared_notes', where: 'id = ?', whereArgs: [note.id]);
+          await _upsertCache(serverNote);
+        }
+      } catch (_) {
+        // Still offline — leave the local_ note in place
+      }
+    }
   }
 
   /// Returns notes from the local SQLite cache (no network call).
@@ -64,7 +125,10 @@ class SharedNoteService {
   // ── CRUD ──────────────────────────────────────────────────────────────────
 
   /// Creates a new shared note on the server and adds it to the local cache.
-  static Future<SharedNote?> createNote({
+  /// If the backend is unreachable, saves locally with a temporary `local_` ID
+  /// so the note is not lost. Local notes are pushed to the server on the
+  /// next successful sync via [syncAndGetNotes].
+  static Future<SharedNote> createNote({
     required String title,
     required String body,
     String fontFamily = 'Merriweather',
@@ -77,20 +141,41 @@ class SharedNoteService {
         headers: headers,
         body: jsonEncode({
           'title': title,
-          'body': body,
+          'body': _deltaToPlainText(body), // backend stores plain text
           'font_family': fontFamily,
           'cover_color': coverColor,
         }),
-      );
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 201) {
-        final note =
-            SharedNote.fromApiJson(jsonDecode(response.body) as Map<String, dynamic>);
+        // Store the Delta JSON body locally for rich editing; server gets plain text.
+        final note = SharedNote.fromApiJson(
+                jsonDecode(response.body) as Map<String, dynamic>)
+            .copyWith(body: body);
         await _upsertCache(note);
         return note;
       }
     } catch (_) {}
-    return null;
+
+    // Backend unreachable — persist locally so nothing is lost.
+    // A local_ ID signals that this note has not been pushed to the server yet.
+    final user = await AuthService.getCachedUser();
+    final now = DateTime.now();
+    final localNote = SharedNote(
+      id: 'local_${now.millisecondsSinceEpoch}',
+      ownerEmail: user?.email ?? '',
+      ownerDisplayName: user?.displayName,
+      ownerAvatarUrl: user?.avatarUrl,
+      title: title,
+      body: body,
+      fontFamily: fontFamily,
+      coverColor: coverColor,
+      myPermission: 'owner',
+      serverUpdatedAt: now,
+      syncedAt: now,
+    );
+    await _upsertCache(localNote);
+    return localNote;
   }
 
   /// Updates an existing shared note on the server and refreshes the cache.
@@ -102,9 +187,10 @@ class SharedNoteService {
     String? coverColor,
   }) async {
     final headers = await _authHeaders();
+    // Backend gets plain text; local cache stores Delta JSON for rich editing.
     final payload = <String, dynamic>{
       if (title != null) 'title': title,
-      if (body != null) 'body': body,
+      if (body != null) 'body': _deltaToPlainText(body),
       if (fontFamily != null) 'font_family': fontFamily,
       if (coverColor != null) 'cover_color': coverColor,
     };
@@ -117,12 +203,32 @@ class SharedNoteService {
       );
 
       if (response.statusCode == 200) {
-        final note =
+        final serverNote =
             SharedNote.fromApiJson(jsonDecode(response.body) as Map<String, dynamic>);
-        await _upsertCache(note);
-        return note;
+        // Override body in local cache with the original Delta JSON
+        final cachedNote = body != null ? serverNote.copyWith(body: body) : serverNote;
+        await _upsertCache(cachedNote);
+        return cachedNote;
       }
     } catch (_) {}
+
+    // Offline — update local cache directly so the edit is not lost
+    if (noteId.startsWith('local_') || body != null || title != null) {
+      final db = DatabaseService.instance;
+      final existing = await db.query(
+          'shared_notes', where: 'id = ?', whereArgs: [noteId]);
+      if (existing.isNotEmpty) {
+        final current = SharedNote.fromMap(existing.first);
+        final updated = current.copyWith(
+          title: title,
+          body: body,
+          fontFamily: fontFamily,
+          coverColor: coverColor,
+        );
+        await _upsertCache(updated);
+        return updated;
+      }
+    }
     return null;
   }
 
@@ -233,7 +339,8 @@ class SharedNoteService {
   static Future<void> _replaceCache(List<SharedNote> notes) async {
     final db = DatabaseService.instance;
     final batch = db.batch();
-    batch.delete('shared_notes');
+    // Delete only server-synced notes; preserve local_ drafts pending upload.
+    batch.delete('shared_notes', where: "id NOT LIKE 'local_%'");
     for (final note in notes) {
       batch.insert('shared_notes', note.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace);

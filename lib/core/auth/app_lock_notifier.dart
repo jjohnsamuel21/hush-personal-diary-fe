@@ -31,12 +31,18 @@ class AppLockNotifier extends StateNotifier<AppLockState> {
   /// On first launch: generates a salt + derives a key from a default PIN ("000000")
   ///   then saves both to secure storage.
   /// On subsequent launches: loads the existing salt, re-derives the key,
-  ///   then authenticates biometrics.
+  ///   then authenticates biometrics if the device has security set up.
+  /// If the device has NO security at all (no biometrics, no PIN, no pattern),
+  ///   the app opens without authentication — there is nothing to authenticate against.
   /// Returns true if unlock succeeded.
   Future<bool> unlock() async {
-    // Step 1: try biometric/PIN authentication
-    final authenticated = await BiometricAuth.authenticate();
-    if (!authenticated) return false;
+    // Step 1: only prompt biometrics when the device actually has security configured.
+    // On a device with zero security, isAvailable() returns false — skip auth entirely.
+    final available = await BiometricAuth.isAvailable();
+    if (available) {
+      final authenticated = await BiometricAuth.authenticate();
+      if (!authenticated) return false;
+    }
 
     // Step 2: load or create the master encryption key
     final masterKey = await _getOrCreateMasterKey();

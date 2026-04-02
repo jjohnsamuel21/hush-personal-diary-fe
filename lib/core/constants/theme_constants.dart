@@ -19,6 +19,7 @@ class HushTheme {
   final String bodyFont;        // Font for note body text
   final String headingFont;     // Font for headings
   final PageStyle pageStyle;    // Blank / ruled / dotted / grid
+  final String defaultBackgroundPresetId; // ID from kBackgroundPresets auto-applied with theme
 
   const HushTheme({
     required this.id,
@@ -34,6 +35,7 @@ class HushTheme {
     required this.bodyFont,
     required this.headingFont,
     required this.pageStyle,
+    required this.defaultBackgroundPresetId,
   });
 }
 
@@ -59,6 +61,7 @@ const List<HushTheme> kHushThemes = [
     bodyFont: 'DM Sans',
     headingFont: 'DM Serif Display',
     pageStyle: PageStyle.blank,
+    defaultBackgroundPresetId: 'parchment', // warm parchment matches Hush warmth
   ),
 
   // ── Midnight ─────────────────────────────────────────────────────────────
@@ -77,6 +80,7 @@ const List<HushTheme> kHushThemes = [
     bodyFont: 'DM Sans',
     headingFont: 'DM Serif Display',
     pageStyle: PageStyle.blank,
+    defaultBackgroundPresetId: 'midnight', // deep dark matches Midnight mood
   ),
 
   // ── Forest ────────────────────────────────────────────────────────────────
@@ -95,6 +99,7 @@ const List<HushTheme> kHushThemes = [
     bodyFont: 'DM Sans',
     headingFont: 'DM Serif Display',
     pageStyle: PageStyle.blank,
+    defaultBackgroundPresetId: 'forest', // soft green matches Forest earthy feel
   ),
 
   // ── Ocean ─────────────────────────────────────────────────────────────────
@@ -113,6 +118,7 @@ const List<HushTheme> kHushThemes = [
     bodyFont: 'DM Sans',
     headingFont: 'DM Serif Display',
     pageStyle: PageStyle.blank,
+    defaultBackgroundPresetId: 'ocean', // pale blue matches Ocean serenity
   ),
 ];
 

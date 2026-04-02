@@ -10,6 +10,7 @@ import '../screens/search/search_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/tags/tag_management_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
+import '../screens/activity/activity_logs_screen.dart';
 import '../screens/shared/invites_screen.dart';
 import '../screens/shared/manage_collaborators_screen.dart';
 import '../screens/shared/shared_note_editor_screen.dart';
@@ -101,6 +102,11 @@ GoRouter createRouter(Ref ref) {
             path: 'tags',
             pageBuilder: (_, state) =>
                 _fadePage(state, const TagManagementScreen()),
+          ),
+          GoRoute(
+            path: 'activity',
+            pageBuilder: (_, state) =>
+                _fadePage(state, const ActivityLogsScreen()),
           ),
         ],
       ),

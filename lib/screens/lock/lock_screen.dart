@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_lock_notifier.dart';
+import '../../core/auth/biometric_auth.dart';
 
 // The first screen the user sees every time they open the app.
 // Shows the Hush logo and an unlock button.
@@ -16,6 +17,18 @@ class LockScreen extends ConsumerStatefulWidget {
 
 class _LockScreenState extends ConsumerState<LockScreen> {
   bool _isUnlocking = false;
+  bool _biometricAvailable = true; // assume true until checked
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometric();
+  }
+
+  Future<void> _checkBiometric() async {
+    final available = await BiometricAuth.isAvailable();
+    if (mounted) setState(() => _biometricAvailable = available);
+  }
 
   Future<void> _handleUnlock() async {
     setState(() => _isUnlocking = true);
@@ -68,7 +81,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                 ),
                 const SizedBox(height: 60),
 
-                // Unlock button
+                // Unlock button — label adapts based on device security
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -80,13 +93,30 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.fingerprint),
+                        : Icon(_biometricAvailable
+                            ? Icons.fingerprint
+                            : Icons.lock_open_rounded),
                     label: Text(
-                      _isUnlocking ? 'Unlocking…' : 'Unlock with Biometric',
+                      _isUnlocking
+                          ? 'Opening…'
+                          : (_biometricAvailable
+                              ? 'Unlock with Biometric'
+                              : 'Open Hush'),
                       style: const TextStyle(fontSize: 16),
                     ),
                   ),
                 ),
+                if (!_biometricAvailable) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'No device security detected — tap to open.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.onSurface.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ],
 
                 // DEV ONLY — shown in debug builds only, invisible in release.
                 // kDebugMode is a Flutter constant that is false in release builds,

@@ -25,11 +25,16 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  int _currentTab = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return;
+      setState(() => _currentTab = _tabController.index);
+    });
   }
 
   @override
@@ -40,6 +45,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isSignedIn = ref.watch(isGoogleSignedInProvider);
+
+    // Tab-aware FAB: All Entries → new entry, Journals → none, Shared → new shared note
+    Widget? fab;
+    if (_currentTab == 0) {
+      fab = FloatingActionButton(
+        onPressed: () => context.push('/editor'),
+        tooltip: 'New entry',
+        child: const Icon(Icons.edit_outlined),
+      );
+    } else if (_currentTab == 2 && isSignedIn) {
+      fab = FloatingActionButton(
+        heroTag: 'fab_shared',
+        onPressed: () => context.push('/shared/editor'),
+        tooltip: 'New shared note',
+        child: const Icon(Icons.add),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: Padding(
@@ -68,8 +92,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            const Tab(text: 'Journals'),
             const Tab(text: 'All Entries'),
+            const Tab(text: 'Journals'),
             Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -95,17 +119,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         child: TabBarView(
           controller: _tabController,
           children: [
-            _FolderGridTab(onFolderTap: _openFolder, onCreateFolder: _showCreateFolder),
             _AllNotesTab(),
+            _FolderGridTab(onFolderTap: _openFolder, onCreateFolder: _showCreateFolder),
             _SharedTab(),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/editor?folderId=1'),
-        tooltip: 'New entry',
-        child: const Icon(Icons.edit_outlined),
-      ),
+      floatingActionButton: fab,
     );
   }
 
@@ -243,15 +263,27 @@ class _FolderGridTab extends ConsumerWidget {
                 await _showSetPinDialog(context, ref, folder);
               },
             ),
-            // Remove PIN
+            // Remove PIN — requires PIN verification first
             if (folder.isLocked)
               ListTile(
                 leading: const Icon(Icons.lock_open_outlined),
                 title: const Text('Remove PIN'),
                 onTap: () async {
                   Navigator.pop(context);
-                  await FolderService.removePin(folder.id!);
-                  ref.invalidate(foldersProvider);
+                  // Verify the current PIN before removing it
+                  final verified = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => _VerifyPinToRemoveDialog(folder: folder),
+                  );
+                  if (verified == true) {
+                    await FolderService.removePin(folder.id!);
+                    ref.invalidate(foldersProvider);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('PIN removed successfully')),
+                      );
+                    }
+                  }
                 },
               ),
             const Divider(height: 8),
@@ -289,11 +321,32 @@ class _AllNotesTab extends ConsumerStatefulWidget {
 
 class _AllNotesTabState extends ConsumerState<_AllNotesTab>
     with AutomaticKeepAliveClientMixin {
-  bool _reorderMode = false;
-  List<Note> _reorderList = []; // used only in reorder mode
+  NoteSortOrder _sortOrder = NoteSortOrder.lastEdited;
 
   @override
   bool get wantKeepAlive => true;
+
+  List<Note> _sorted(List<Note> notes) {
+    final list = List<Note>.from(notes);
+    switch (_sortOrder) {
+      case NoteSortOrder.lastEdited:
+        list.sort((a, b) {
+          if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+          return b.updatedAt.compareTo(a.updatedAt);
+        });
+      case NoteSortOrder.createdAt:
+        list.sort((a, b) {
+          if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+      case NoteSortOrder.alphabetical:
+        list.sort((a, b) {
+          if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        });
+    }
+    return list;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -301,11 +354,21 @@ class _AllNotesTabState extends ConsumerState<_AllNotesTab>
     final notesAsync = ref.watch(notesProvider(null));
     final colors = Theme.of(context).colorScheme;
 
+    // Build set of locked folder IDs so their entries are hidden here
+    final lockedIds = ref.watch(foldersProvider).valueOrNull
+            ?.where((f) => f.isLocked)
+            .map((f) => f.id)
+            .whereType<int>()
+            .toSet() ??
+        <int>{};
+
     return notesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Error: $e')),
       data: (notes) {
-        final visible = notes.where((n) => !n.isArchived).toList();
+        final visible = notes
+            .where((n) => !n.isArchived && !lockedIds.contains(n.folderId))
+            .toList();
         if (visible.isEmpty) {
           return Center(
             child: Column(
@@ -329,81 +392,61 @@ class _AllNotesTabState extends ConsumerState<_AllNotesTab>
           );
         }
 
+        final sorted = _sorted(visible);
+
         return Column(
           children: [
-            // ── Toolbar: group / reorder toggle ──────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            // ── Sort bar ──────────────────────────────────────────────────
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton.icon(
-                    icon: Icon(
-                      _reorderMode ? Icons.check_rounded : Icons.swap_vert_rounded,
-                      size: 16,
-                    ),
-                    label: Text(_reorderMode ? 'Done' : 'Reorder'),
-                    onPressed: () {
-                      if (_reorderMode) {
-                        // Persist the new order
-                        final ids = _reorderList
-                            .where((n) => n.id != null)
-                            .map((n) => n.id!)
-                            .toList();
-                        NoteService.reorderNotes(ids).then((_) {
-                          ref.invalidate(notesProvider);
-                        });
-                      } else {
-                        // Sort: custom sort_order if set, else by updatedAt
-                        _reorderList = List<Note>.from(visible)
-                          ..sort((a, b) {
-                            if (a.sortOrder != 0 || b.sortOrder != 0) {
-                              final aSo = a.sortOrder == 0 ? 999999 : a.sortOrder;
-                              final bSo = b.sortOrder == 0 ? 999999 : b.sortOrder;
-                              return aSo.compareTo(bSo);
-                            }
-                            return b.updatedAt.compareTo(a.updatedAt);
-                          });
-                      }
-                      setState(() => _reorderMode = !_reorderMode);
-                    },
+                  _SortChip(
+                    label: 'Last Edited',
+                    icon: Icons.edit_outlined,
+                    selected: _sortOrder == NoteSortOrder.lastEdited,
+                    onTap: () => setState(
+                        () => _sortOrder = NoteSortOrder.lastEdited),
+                  ),
+                  const SizedBox(width: 8),
+                  _SortChip(
+                    label: 'Created Date',
+                    icon: Icons.calendar_today_outlined,
+                    selected: _sortOrder == NoteSortOrder.createdAt,
+                    onTap: () => setState(
+                        () => _sortOrder = NoteSortOrder.createdAt),
+                  ),
+                  const SizedBox(width: 8),
+                  _SortChip(
+                    label: 'A → Z',
+                    icon: Icons.sort_by_alpha_rounded,
+                    selected: _sortOrder == NoteSortOrder.alphabetical,
+                    onTap: () => setState(
+                        () => _sortOrder = NoteSortOrder.alphabetical),
                   ),
                 ],
               ),
             ),
 
-            // ── Content: grouped or reorderable ──────────────────────────
-            Expanded(
-              child: _reorderMode
-                  ? _buildReorderList()
-                  : _buildGroupedList(visible),
-            ),
+            // ── Note list ─────────────────────────────────────────────────
+            Expanded(child: _buildList(sorted)),
           ],
         );
       },
     );
   }
 
-  Widget _buildReorderList() {
-    return ReorderableListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _reorderList.length,
-      itemBuilder: (_, i) => ReorderableDragStartListener(
-        key: ValueKey(_reorderList[i].id),
-        index: i,
-        child: NoteCard(note: _reorderList[i]),
-      ),
-      onReorder: (oldIndex, newIndex) {
-        setState(() {
-          if (newIndex > oldIndex) newIndex--;
-          final item = _reorderList.removeAt(oldIndex);
-          _reorderList.insert(newIndex, item);
-        });
-      },
-    );
-  }
-
-  Widget _buildGroupedList(List<Note> notes) {
+  Widget _buildList(List<Note> notes) {
+    // Date grouping only makes sense for date-based sorts
+    if (_sortOrder == NoteSortOrder.alphabetical) {
+      return ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: notes.length,
+        itemBuilder: (_, i) => NoteCard(note: notes[i]),
+      );
+    }
+    // Date-grouped for lastEdited and createdAt
     final groups = _groupByDate(notes);
     final items = <_ListItem>[];
     for (final entry in groups.entries) {
@@ -412,21 +455,18 @@ class _AllNotesTabState extends ConsumerState<_AllNotesTab>
         items.addAll(entry.value.map(_ListItem.note));
       }
     }
-
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
       itemBuilder: (_, i) {
         final item = items[i];
-        if (item.isHeader) {
-          return _GroupHeader(label: item.label!);
-        }
-        return NoteCard(note: item.note!);
+        return item.isHeader
+            ? _GroupHeader(label: item.label!)
+            : NoteCard(note: item.note!);
       },
     );
   }
 
-  // Groups notes into date buckets in display order.
   Map<String, List<Note>> _groupByDate(List<Note> notes) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -441,7 +481,8 @@ class _AllNotesTabState extends ConsumerState<_AllNotesTab>
 
     for (final n in notes) {
       if (n.isPinned) { pinned.add(n); continue; }
-      final d = DateTime(n.updatedAt.year, n.updatedAt.month, n.updatedAt.day);
+      final dt = _sortOrder == NoteSortOrder.createdAt ? n.createdAt : n.updatedAt;
+      final d = DateTime(dt.year, dt.month, dt.day);
       if (d == today) {
         todayGroup.add(n);
       } else if (d.isAfter(weekAgo)) {
@@ -460,6 +501,60 @@ class _AllNotesTabState extends ConsumerState<_AllNotesTab>
       if (monthGroup.isNotEmpty) 'This Month': monthGroup,
       if (older.isNotEmpty) 'Older': older,
     };
+  }
+}
+
+// ─── Sort chip button ─────────────────────────────────────────────────────────
+class _SortChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SortChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.primary.withValues(alpha: 0.12)
+              : colors.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? colors.primary : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: selected ? colors.primary : colors.onSurfaceVariant),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                color: selected ? colors.primary : colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -821,6 +916,94 @@ class _PinEntryDialogState extends State<_PinEntryDialog> {
   }
 }
 
+// ─── Verify PIN before removing it ───────────────────────────────────────────
+class _VerifyPinToRemoveDialog extends StatefulWidget {
+  final Folder folder;
+  const _VerifyPinToRemoveDialog({required this.folder});
+
+  @override
+  State<_VerifyPinToRemoveDialog> createState() =>
+      _VerifyPinToRemoveDialogState();
+}
+
+class _VerifyPinToRemoveDialogState extends State<_VerifyPinToRemoveDialog> {
+  final _ctrl = TextEditingController();
+  bool _obscure = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final pin = _ctrl.text;
+    if (pin.isEmpty) return;
+    final ok = await FolderService.verifyPin(widget.folder.id!, pin);
+    if (ok) {
+      if (mounted) Navigator.pop(context, true);
+    } else {
+      if (mounted) setState(() => _error = 'Incorrect PIN.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.lock_open_outlined),
+          SizedBox(width: 8),
+          Text('Confirm PIN to Remove'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Enter your current PIN to confirm removal.',
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            obscureText: _obscure,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Current PIN',
+              border: const OutlineInputBorder(),
+              errorText: _error,
+              suffixIcon: IconButton(
+                icon: Icon(_obscure
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: _submit,
+          child: const Text('Remove PIN'),
+        ),
+      ],
+    );
+  }
+}
+
 // ─── Set PIN dialog (create or change a journal PIN) ─────────────────────────
 class _SetPinDialog extends StatefulWidget {
   final Folder folder;
@@ -963,20 +1146,6 @@ class _SharedTab extends ConsumerWidget {
       );
     }
 
-    return Stack(
-      children: [
-        const SharedNotesScreen(),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton(
-            heroTag: 'fab_shared',
-            onPressed: () => context.push('/shared/editor'),
-            tooltip: 'New shared note',
-            child: const Icon(Icons.add),
-          ),
-        ),
-      ],
-    );
+    return const SharedNotesScreen();
   }
 }

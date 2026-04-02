@@ -14,7 +14,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -124,6 +124,22 @@ class DatabaseService {
         )
       ''');
     }
+    if (oldVersion < 10) {
+      // Activity log for both local and shared note sessions.
+      // Local logs can be deleted by the user; shared logs are per-user (deleting
+      // your log does not affect other collaborators' logs).
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS activity_logs (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_type TEXT NOT NULL DEFAULT 'local',
+          note_id      TEXT,
+          action       TEXT NOT NULL,
+          note_title   TEXT,
+          detail       TEXT,
+          created_at   TEXT NOT NULL
+        )
+      ''');
+    }
   }
 
   // Called once when the database file is first created.
@@ -208,18 +224,18 @@ class DatabaseService {
         synced_at            TEXT NOT NULL
       )
     ''');
-
-    // Create the default "General" folder on first launch
-    final now = DateTime.now().toIso8601String();
-    await db.insert('folders', {
-      'name': 'General',
-      'color': '#5C6BC0',
-      'icon': 'book',
-      'is_locked': 0,
-      'sort_order': 0,
-      'created_at': now,
-      'updated_at': now,
-    });
+    await db.execute('''
+      CREATE TABLE activity_logs (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_type TEXT NOT NULL DEFAULT 'local',
+        note_id      TEXT,
+        action       TEXT NOT NULL,
+        note_title   TEXT,
+        detail       TEXT,
+        created_at   TEXT NOT NULL
+      )
+    ''');
+    // No default folders — users create journals explicitly.
   }
 }
 

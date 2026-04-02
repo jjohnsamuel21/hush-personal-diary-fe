@@ -22,8 +22,10 @@ import '../../widgets/common/app_background.dart';
 import '../../widgets/editor/sticker_panel.dart';
 import '../../screens/gif/gif_picker_screen.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'audio_embed_builder.dart';
 import 'drawing_canvas_screen.dart';
 import 'image_embed_builder.dart';
+import '../../services/activity_log_service.dart';
 
 class NoteEditorScreen extends ConsumerStatefulWidget {
   final int? noteId;
@@ -175,6 +177,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         noteBgPresetId: _noteBgPresetId,
         noteBgImagePath: _noteBgImagePath,
       );
+      ActivityLogService.log(
+        sessionType: 'local',
+        noteId: created.id.toString(),
+        action: 'created',
+        noteTitle: created.title,
+      );
       if (mounted) {
         setState(() {
           _existingNote = created;
@@ -192,6 +200,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         layoutImages: _layoutImages,
         noteBgPresetId: _noteBgPresetId,
         noteBgImagePath: _noteBgImagePath,
+      );
+      ActivityLogService.log(
+        sessionType: 'local',
+        noteId: _existingNote!.id.toString(),
+        action: 'edited',
+        noteTitle: title.isNotEmpty ? title : _existingNote!.title,
       );
       if (mounted) setState(() => _existingNote = updated);
     }
@@ -387,6 +401,36 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     );
   }
 
+  // ── Audio recorder ──────────────────────────────────────────────────────────
+  void _openAudioRecorder() {
+    if (_controller == null) return;
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => AudioRecorderSheet(
+        onDone: (path) {
+          Navigator.pop(context);
+          if (path == null || !mounted) return;
+          final ctrl = _controller;
+          if (ctrl == null) return;
+          final index = ctrl.selection.isValid
+              ? ctrl.selection.extentOffset
+              : ctrl.document.length - 1;
+          ctrl.document.insert(index, BlockEmbed(kAudioEmbedKey, path));
+          ctrl.updateSelection(
+            TextSelection.collapsed(offset: index + 1),
+            ChangeSource.local,
+          );
+          _autoSave();
+        },
+      ),
+    );
+  }
+
   // ── Drawing canvas ──────────────────────────────────────────────────────────
   Future<void> _openDrawingCanvas() async {
     if (_controller == null) return;
@@ -455,6 +499,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           onSubmitted: (_) => _autoSave(),
         ),
         actions: [
+          // ── Voice note (prominently visible — easy one-tap access) ──
+          IconButton(
+            icon: Icon(Icons.mic_rounded, color: colors.primary),
+            tooltip: 'Voice note',
+            onPressed: _openAudioRecorder,
+          ),
           // ── Emoji picker (frequently used — stays visible) ──
           IconButton(
             icon: Icon(Icons.emoji_emotions_outlined, color: colors.primary),
@@ -644,7 +694,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                             config: const QuillEditorConfig(
                               placeholder: "What's on your mind today?",
                               padding: EdgeInsets.only(top: 8),
-                              embedBuilders: [LocalImageEmbedBuilder()],
+                              embedBuilders: [
+                                LocalImageEmbedBuilder(),
+                                AudioEmbedBuilder(),
+                              ],
                             ),
                           ),
                         ),

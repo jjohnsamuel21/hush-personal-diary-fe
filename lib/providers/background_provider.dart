@@ -154,19 +154,33 @@ bool needsLightText(AppBackground bg, {bool defaultIsLight = false}) {
   return color.computeLuminance() < 0.35;
 }
 
-/// Adapt a [ThemeData] so that all text/icon colors are readable on [bg].
-/// For solid colors and gradients the luminance is computed; for images the
-/// theme is returned unchanged (the semi-transparent overlay handles contrast).
+/// Adapt a [ThemeData] so that all text/icon AND surface colors are readable
+/// on [bg]. For solid colors and gradients the luminance is computed; for
+/// image backgrounds the semi-transparent overlay handles contrast so the
+/// theme is returned unchanged.
 ThemeData adaptThemeForBackground(ThemeData theme, AppBackground bg) {
   final color = dominantColor(bg);
-  if (color == null) return theme; // image bg — can't know, keep as-is
+  if (color == null) return theme; // image bg — keep as-is
 
   final lightBg = color.computeLuminance() > 0.35;
-  final textColor  = lightBg ? const Color(0xFF1A1A1A) : const Color(0xFFF2F0EB);
-  final subColor   = lightBg ? const Color(0xFF5A5A5A) : const Color(0xFFB0ADA8);
+
+  final textColor = lightBg ? const Color(0xFF1A1A1A) : const Color(0xFFF2F0EB);
+  final subColor  = lightBg ? const Color(0xFF5A5A5A) : const Color(0xFFB0ADA8);
+
+  // Card / dialog surface: derive from the background color itself so the
+  // card surface is always consistent regardless of which app theme is active.
+  // Light bg → near-white card; dark bg → slightly elevated dark card.
+  final surfaceColor = lightBg
+      ? Color.alphaBlend(Colors.white.withValues(alpha: 0.90), color)
+      : Color.alphaBlend(Colors.white.withValues(alpha: 0.10), color);
+
+  final cardBorderColor = lightBg
+      ? const Color(0xFF000000).withValues(alpha: 0.08)
+      : Colors.white.withValues(alpha: 0.10);
 
   return theme.copyWith(
     colorScheme: theme.colorScheme.copyWith(
+      surface: surfaceColor,
       onSurface: textColor,
       onSurfaceVariant: subColor,
       outline: subColor,
@@ -175,6 +189,15 @@ ThemeData adaptThemeForBackground(ThemeData theme, AppBackground bg) {
     textTheme: theme.textTheme.apply(
       bodyColor: textColor,
       displayColor: textColor,
+    ),
+    // Explicitly update cardTheme so Card widgets pick up the right surface
+    // color even if they don't re-read colorScheme.surface directly.
+    cardTheme: theme.cardTheme.copyWith(
+      color: surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cardBorderColor, width: 1),
+      ),
     ),
   );
 }

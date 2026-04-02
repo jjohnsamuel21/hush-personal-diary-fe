@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_heatmap_calendar/flutter_heatmap_calendar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/auth/app_lock_notifier.dart';
 import '../../core/constants/theme_constants.dart';
@@ -208,6 +209,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     borderRadius: 4,
                   ),
             const SizedBox(height: 28),
+
+            // ── Activity Log ───────────────────────────────────────────────
+            _Label(text: 'Activity Log'),
+            const SizedBox(height: 8),
+            _ActionTile(
+              icon: Icons.history_rounded,
+              title: 'View activity log',
+              subtitle: 'Track when notes were created, edited, or deleted',
+              loading: false,
+              onTap: () => context.push('/settings/activity'),
+            ),
+            const SizedBox(height: 20),
 
             // ── Daily Reminder ─────────────────────────────────────────────
             _Label(text: 'Daily Reminder'),
@@ -677,16 +690,42 @@ class _BackgroundPresetGridState
           }).toList(),
         ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: widget.onPickCustom,
-          icon: const Icon(Icons.photo_library_outlined, size: 18),
-          label: Text(
-            hasCustomBg
-                ? 'Photo: ${widget.current.imagePath!.split('/').last}'
-                : 'Custom photo from gallery',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: widget.onPickCustom,
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: Text(
+                  hasCustomBg
+                      ? 'Photo: ${widget.current.imagePath!.split('/').last}'
+                      : 'Custom photo from gallery',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (hasCustomBg) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(Icons.close_rounded,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.error),
+                tooltip: 'Remove custom photo',
+                onPressed: () async {
+                  // Revert to the current theme's default background preset
+                  // (or the default preset if for some reason it's not found).
+                  final presets = kBackgroundPresets;
+                  final fallback = presets.firstWhere(
+                      (p) => p.id == 'default',
+                      orElse: () => presets.first);
+                  await ref
+                      .read(backgroundProvider.notifier)
+                      .setPreset(fallback);
+                },
+              ),
+            ],
+          ],
         ),
       ],
     );
@@ -707,7 +746,19 @@ class _ThemePicker extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: GestureDetector(
-              onTap: () => ref.read(themeProvider.notifier).setTheme(theme),
+              onTap: () {
+                ref.read(themeProvider.notifier).setTheme(theme);
+                // Auto-apply the theme's default background, but only if the
+                // user hasn't set a custom photo (preserve their photo choice).
+                final currentBg = ref.read(backgroundProvider);
+                if (currentBg.type != AppBackgroundType.image) {
+                  try {
+                    final preset = kBackgroundPresets.firstWhere(
+                        (p) => p.id == theme.defaultBackgroundPresetId);
+                    ref.read(backgroundProvider.notifier).setPreset(preset);
+                  } catch (_) {}
+                }
+              },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 height: 88,

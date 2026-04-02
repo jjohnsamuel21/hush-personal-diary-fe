@@ -76,6 +76,10 @@ dependencies:
   google_sign_in: ^6.2.2              # Google OAuth sign-in flow
   flutter_timezone: ^3.0.0            # Device timezone for accurate reminder scheduling
 
+  # --- Phase 7: Audio Recording ---
+  record: ^6.2.0                      # Cross-platform mic recording (offline-first)
+  just_audio: ^0.9.38                 # Audio playback for inline note player
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

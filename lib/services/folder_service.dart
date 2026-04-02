@@ -56,10 +56,11 @@ class FolderService {
 
   static Future<void> deleteFolder(int id) async {
     final db = DatabaseService.instance;
-    // Move any notes in this folder to the General folder (id = 1)
+    // Move any notes in this folder to "no folder" (folder_id = 0)
+    // so they still appear in All Entries and can be moved later.
     await db.update(
       'notes',
-      {'folder_id': 1},
+      {'folder_id': 0},
       where: 'folder_id = ?',
       whereArgs: [id],
     );

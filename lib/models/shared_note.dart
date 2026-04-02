@@ -78,6 +78,24 @@ class SharedNote {
   bool get isOwner => myPermission == 'owner';
   bool get canEdit => myPermission == 'owner' || myPermission == 'edit';
 
+  /// Returns body as plain text — handles both Delta JSON and legacy plain text.
+  String get plainTextBody {
+    if (body.isEmpty) return '';
+    if (body.trimLeft().startsWith('[')) {
+      try {
+        final delta = jsonDecode(body) as List<dynamic>;
+        final buffer = StringBuffer();
+        for (final op in delta) {
+          if (op is Map && op['insert'] is String) {
+            buffer.write(op['insert'] as String);
+          }
+        }
+        return buffer.toString().trim();
+      } catch (_) {}
+    }
+    return body;
+  }
+
   // ── API JSON ──────────────────────────────────────────────────────────────
 
   factory SharedNote.fromApiJson(Map<String, dynamic> json) {

@@ -10,6 +10,9 @@ import '../models/note.dart';
 // "explicitly clear to null" for the nullable bg fields.
 const _sentinel = Object();
 
+/// Sort order for note lists.
+enum NoteSortOrder { lastEdited, createdAt, alphabetical }
+
 // All note CRUD operations go through this service.
 // The service owns the encrypt-then-save and load-then-decrypt pipeline.
 // Widgets and providers never touch encryption directly — they call NoteService.
@@ -17,19 +20,28 @@ class NoteService {
   // ───────────────── READ ─────────────────
 
   /// Returns all non-deleted notes, optionally filtered by [folderId].
-  /// Pinned notes appear first, then sorted by updatedAt descending.
-  static Future<List<Note>> getNotes({int? folderId}) async {
+  /// Pinned notes always appear first; then sorted by [sortOrder].
+  static Future<List<Note>> getNotes({
+    int? folderId,
+    NoteSortOrder sortOrder = NoteSortOrder.lastEdited,
+  }) async {
     final db = DatabaseService.instance;
     final whereClause = folderId != null
         ? 'is_deleted = 0 AND folder_id = ?'
         : 'is_deleted = 0';
     final whereArgs = folderId != null ? [folderId] : null;
 
+    final dbOrderBy = switch (sortOrder) {
+      NoteSortOrder.lastEdited   => 'is_pinned DESC, updated_at DESC',
+      NoteSortOrder.createdAt    => 'is_pinned DESC, created_at DESC',
+      NoteSortOrder.alphabetical => 'is_pinned DESC, title ASC',
+    };
+
     final rows = await db.query(
       'notes',
       where: whereClause,
       whereArgs: whereArgs,
-      orderBy: 'is_pinned DESC, updated_at DESC',
+      orderBy: dbOrderBy,
     );
     return rows.map(Note.fromMap).toList();
   }
