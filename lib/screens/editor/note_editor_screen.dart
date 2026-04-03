@@ -635,10 +635,6 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             tooltip: 'Insert & style',
             onPressed: () => _showInsertSheet(context),
           ),
-          TextButton(
-            onPressed: _onDone,
-            child: const Text('Done'),
-          ),
         ],
       ),
       body: _EditorBackgroundWrapper(

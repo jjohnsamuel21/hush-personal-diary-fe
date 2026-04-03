@@ -42,7 +42,11 @@ class SharedNotesNotifier
       fontFamily: fontFamily,
       coverColor: coverColor,
     );
-    _ref.invalidate(sharedNotesProvider);
+    // Update state immediately with the new note prepended — no waiting for server round-trip.
+    final current = state.valueOrNull ?? [];
+    state = AsyncValue.data([note, ...current]);
+    // Background refresh to get server-assigned ID / collaborator info.
+    _load();
     return note;
   }
 
@@ -60,13 +64,23 @@ class SharedNotesNotifier
       fontFamily: fontFamily,
       coverColor: coverColor,
     );
-    if (note != null) _ref.invalidate(sharedNotesProvider);
+    if (note != null) {
+      // Patch in-memory list immediately — no full reload needed.
+      final current = state.valueOrNull ?? [];
+      state = AsyncValue.data(
+        current.map((n) => n.id == noteId ? note : n).toList(),
+      );
+    }
     return note;
   }
 
   Future<bool> deleteNote(String noteId) async {
     final ok = await SharedNoteService.deleteNote(noteId);
-    if (ok) _ref.invalidate(sharedNotesProvider);
+    if (ok) {
+      // Remove from state immediately.
+      final current = state.valueOrNull ?? [];
+      state = AsyncValue.data(current.where((n) => n.id != noteId).toList());
+    }
     return ok;
   }
 

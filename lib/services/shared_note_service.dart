@@ -54,7 +54,7 @@ class SharedNoteService {
       final headers = await _authHeaders();
       final response = await http
           .get(Uri.parse('$_base/api/notes'), headers: headers)
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final list = (jsonDecode(response.body) as List<dynamic>)
@@ -94,7 +94,7 @@ class SharedNoteService {
             'font_family': note.fontFamily,
             'cover_color': note.coverColor,
           }),
-        ).timeout(const Duration(seconds: 5));
+        ).timeout(const Duration(seconds: 3));
 
         if (response.statusCode == 201) {
           // Keep the original Delta JSON body in the local cache (the server
@@ -145,7 +145,7 @@ class SharedNoteService {
           'font_family': fontFamily,
           'cover_color': coverColor,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 201) {
         // Store the Delta JSON body locally for rich editing; server gets plain text.

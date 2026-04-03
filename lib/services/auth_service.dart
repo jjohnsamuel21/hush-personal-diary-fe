@@ -42,9 +42,6 @@ class AuthService {
       final account = await _googleSignIn.signIn();
       if (account == null) return null;
 
-      // Try backend JWT exchange first (works when backend is reachable).
-      // Falls back to building the user directly from the Google account so
-      // sign-in works on physical devices even when the dev backend is offline.
       try {
         final auth = await account.authentication;
         final idToken = auth.idToken;
@@ -66,13 +63,10 @@ class AuthService {
           }
         }
       } catch (_) {
-        // Backend unreachable (dev server, emulator-only IP, no network, etc.)
-        // Fall through to local-only sign-in below.
+        // Backend unreachable — fall through to local-only sign-in.
       }
 
-      // Local-only: build AuthUser directly from the Google account.
-      // No JWT is stored — backend-dependant features (shared notes sync) will
-      // silently no-op until the backend is reachable.
+      // Local-only fallback — shared note sync will work on next open.
       final user = AuthUser(
         id: account.id,
         email: account.email,

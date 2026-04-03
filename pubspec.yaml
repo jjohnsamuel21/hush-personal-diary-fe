@@ -80,6 +80,9 @@ dependencies:
   record: ^6.2.0                      # Cross-platform mic recording (offline-first)
   just_audio: ^0.9.38                 # Audio playback for inline note player
 
+  # --- Phase 8: Live Collaboration ---
+  web_socket_channel: ^2.4.0          # WebSocket client for real-time shared note sync
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

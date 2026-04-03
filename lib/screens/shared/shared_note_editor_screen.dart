@@ -10,6 +10,7 @@ import '../../core/utils/text_utils.dart';
 import '../../models/shared_note.dart';
 import '../../providers/page_style_provider.dart';
 import '../../providers/shared_notes_provider.dart';
+import '../../services/collab_service.dart';
 import '../../widgets/common/app_background.dart';
 import '../../core/constants/theme_constants.dart';
 import '../editor/audio_embed_builder.dart';
@@ -18,6 +19,9 @@ import '../editor/audio_embed_builder.dart';
 /// saves via SharedNoteService (backend + local cache) instead of encrypting
 /// locally.  Body is stored as Quill Delta JSON so rich formatting is
 /// preserved across collaborators.
+///
+/// Live collaboration: when the note has a server-assigned ID a WebSocket
+/// connection is opened so all editors see each other's changes in real time.
 class SharedNoteEditorScreen extends ConsumerStatefulWidget {
   final String? noteId;
   const SharedNoteEditorScreen({super.key, this.noteId});
@@ -43,6 +47,13 @@ class _SharedNoteEditorScreenState
 
   Timer? _debounceTimer;
 
+  // ── Collab state ──────────────────────────────────────────────────────────
+  CollabService? _collab;
+  StreamSubscription<dynamic>? _docChangeSub;
+  bool _applyingRemote = false;          // blocks re-broadcast of incoming ops
+  List<CollabUser> _onlineUsers = [];    // collaborators currently in the room
+  Map<String, RemoteCursor> _cursors = {}; // user_id → last known cursor
+
   @override
   void initState() {
     super.initState();
@@ -55,11 +66,13 @@ class _SharedNoteEditorScreenState
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _docChangeSub?.cancel();
     _controller?.removeListener(_onDocumentChanged);
     _controller?.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
     _titleCtrl.dispose();
+    _collab?.disconnect();
     super.dispose();
   }
 
@@ -67,7 +80,6 @@ class _SharedNoteEditorScreenState
     QuillController controller;
 
     if (widget.noteId != null) {
-      // Load from cache — try provider first, fall back to service
       final cached = ref.read(sharedNotesProvider).valueOrNull;
       final note = cached?.where((n) => n.id == widget.noteId).firstOrNull;
 
@@ -86,6 +98,12 @@ class _SharedNoteEditorScreenState
 
     controller.addListener(_onDocumentChanged);
 
+    // Subscribe to document delta stream to send live ops over WebSocket.
+    _docChangeSub = controller.document.changes.listen((event) {
+      if (_applyingRemote || event.source == ChangeSource.remote) return;
+      _collab?.sendDelta(event.change);
+    });
+
     if (!mounted) { controller.dispose(); return; }
     setState(() {
       _controller = controller;
@@ -95,6 +113,42 @@ class _SharedNoteEditorScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });
+
+    // Connect collab WebSocket for server-synced notes (not local_ drafts).
+    final id = widget.noteId;
+    if (id != null && !id.startsWith('local_')) {
+      _connectCollab(id);
+    }
+  }
+
+  void _connectCollab(String noteId) {
+    _collab = CollabService(noteId: noteId)
+      ..onRemoteDelta = _applyRemoteDelta
+      ..onPresenceChanged = (users) {
+        if (mounted) setState(() => _onlineUsers = users);
+      }
+      ..onCursorChanged = (cursor) {
+        if (mounted) {
+          setState(() => _cursors[cursor.userId] = cursor);
+        }
+      };
+    _collab!.connect();
+  }
+
+  /// Applies a remote delta to the document without triggering our own
+  /// change listener or HTTP auto-save.
+  void _applyRemoteDelta(List<dynamic> ops) {
+    final ctrl = _controller;
+    if (ctrl == null || !mounted) return;
+    try {
+      final delta = Delta.fromJson(ops);
+      _applyingRemote = true;
+      ctrl.document.compose(delta, ChangeSource.remote);
+    } catch (_) {
+      // Ignore malformed deltas — document stays as-is.
+    } finally {
+      _applyingRemote = false;
+    }
   }
 
   /// Builds a QuillController from a body string that may be Delta JSON
@@ -126,13 +180,24 @@ class _SharedNoteEditorScreenState
   }
 
   void _onDocumentChanged() {
+    if (_applyingRemote) return;
+
     final ctrl = _controller;
     if (ctrl == null) return;
+
+    // Update word count.
     final count = TextUtils.countWords(ctrl.document.toPlainText());
     if (count != _wordCount) setState(() => _wordCount = count);
 
+    // Broadcast cursor position.
+    final sel = ctrl.selection;
+    if (sel.isValid) {
+      _collab?.sendCursor(sel.baseOffset, sel.extentOffset - sel.baseOffset);
+    }
+
+    // Debounced HTTP auto-save.
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 1500), _autoSave);
+    _debounceTimer = Timer(const Duration(milliseconds: 800), _autoSave);
   }
 
   Future<void> _autoSave() async {
@@ -150,7 +215,6 @@ class _SharedNoteEditorScreenState
     final title = _titleCtrl.text.trim().isEmpty ? 'Untitled' : _titleCtrl.text.trim();
 
     if (_note == null) {
-      // New note — creates locally if backend unreachable
       final created = await ref
           .read(sharedNotesNotifierProvider.notifier)
           .createNote(
@@ -166,13 +230,15 @@ class _SharedNoteEditorScreenState
       );
       if (mounted) {
         setState(() => _note = created);
-        // Replace the creation route with the editing route so Back works correctly
         if (widget.noteId == null) {
           context.replace('/shared/editor?noteId=${created.id}');
+          // Connect collab now that we have a real server ID.
+          if (!created.id.startsWith('local_')) {
+            _connectCollab(created.id);
+          }
         }
       }
     } else {
-      // Update existing note
       final canEdit = _note!.canEdit;
       if (!canEdit) return;
       await ref.read(sharedNotesNotifierProvider.notifier).updateNote(
@@ -248,6 +314,9 @@ class _SharedNoteEditorScreenState
     final readOnly = _note != null && !_note!.canEdit;
     final isLocal = _note?.id.startsWith('local_') == true;
 
+    // Other editors minus self (presence list includes self).
+    final others = _onlineUsers.where((u) => u.id != _note?.ownerEmail).toList();
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -273,6 +342,42 @@ class _SharedNoteEditorScreenState
                 onSubmitted: (_) => _autoSave(),
               ),
         actions: [
+          // Live presence dots — coloured circles for each online collaborator.
+          if (_onlineUsers.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: _onlineUsers.take(5).map((u) {
+                  return Tooltip(
+                    message: u.name,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      margin: const EdgeInsets.only(right: 2),
+                      decoration: BoxDecoration(
+                        color: u.color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: colors.surface,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          u.name.isNotEmpty ? u.name[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           if (!readOnly) ...[
             IconButton(
               icon: Icon(Icons.mic_rounded, color: colors.primary),
@@ -319,10 +424,6 @@ class _SharedNoteEditorScreenState
                   ),
                 ),
               ),
-            TextButton(
-              onPressed: _onDone,
-              child: const Text('Done'),
-            ),
           ],
           if (_note != null && _note!.isOwner)
             IconButton(
@@ -401,6 +502,10 @@ class _SharedNoteEditorScreenState
                         ],
                       ),
                     ),
+
+                  // ── Active editors bar (live collab) ─────────────────────
+                  if (_onlineUsers.length > 1)
+                    _CollabBar(users: _onlineUsers),
 
                   // ── Quill toolbar ────────────────────────────────────────
                   if (!readOnly)
@@ -484,12 +589,44 @@ class _SharedNoteEditorScreenState
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Active editors bar — shown when ≥2 people are in the room
+// ─────────────────────────────────────────────────────────────────────────────
+class _CollabBar extends StatelessWidget {
+  final List<CollabUser> users;
+  const _CollabBar({required this.users});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Row(
+        children: [
+          Icon(Icons.fiber_manual_record,
+              size: 8, color: Colors.greenAccent.shade400),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${users.length} editing now — ${users.map((u) => u.name.split(' ').first).join(', ')}',
+              style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Enum for overflow menu actions
 // ─────────────────────────────────────────────────────────────────────────────
 enum _SharedEditorAction { toggleToolbar }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Font picker sheet (same as local editor)
+// Font picker sheet
 // ─────────────────────────────────────────────────────────────────────────────
 class _SharedFontPickerSheet extends StatelessWidget {
   final NoteFont current;
@@ -592,7 +729,7 @@ class _SharedWordCountBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Page texture painter (identical to local editor)
+// Page texture painter
 // ─────────────────────────────────────────────────────────────────────────────
 class _SharedEditorTexturePainter extends CustomPainter {
   final PageStyle style;
