@@ -463,6 +463,124 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     );
   }
 
+  // ── Insert & style sheet ────────────────────────────────────────────────────
+  // Single entry point for all non-text-formatting actions.
+  // Replaces the old cluttered AppBar icons + popup menu.
+  void _showInsertSheet(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // RECORD
+              _SheetSection(label: 'RECORD', colors: colors),
+              _SheetRow(children: [
+                _SheetItem(
+                  icon: Icons.mic_rounded,
+                  label: 'Voice note',
+                  color: colors.primary,
+                  onTap: () { Navigator.pop(context); _openAudioRecorder(); },
+                ),
+                _SheetItem(
+                  icon: Icons.draw_outlined,
+                  label: 'Drawing',
+                  color: colors.primary,
+                  onTap: () { Navigator.pop(context); _openDrawingCanvas(); },
+                ),
+              ]),
+              const SizedBox(height: 12),
+
+              // INSERT
+              _SheetSection(label: 'INSERT', colors: colors),
+              _SheetRow(children: [
+                _SheetItem(
+                  icon: Icons.emoji_emotions_outlined,
+                  label: 'Emoji',
+                  color: colors.secondary,
+                  onTap: () { Navigator.pop(context); _openEmojiPicker(); },
+                ),
+                _SheetItem(
+                  icon: Icons.auto_awesome_outlined,
+                  label: 'Sticker',
+                  color: colors.secondary,
+                  onTap: () { Navigator.pop(context); _openStickerPanel(); },
+                ),
+                _SheetItem(
+                  icon: Icons.gif_box_outlined,
+                  label: 'GIF',
+                  color: colors.secondary,
+                  onTap: () { Navigator.pop(context); _openGifPicker(); },
+                ),
+              ]),
+              const SizedBox(height: 12),
+
+              // STYLE
+              _SheetSection(label: 'STYLE', colors: colors),
+              _SheetRow(children: [
+                _SheetItem(
+                  icon: Icons.text_fields_rounded,
+                  label: 'Font\n${_currentFont.label}',
+                  color: colors.tertiary,
+                  onTap: () { Navigator.pop(context); _openFontPicker(); },
+                ),
+                _SheetItem(
+                  icon: Icons.wallpaper_outlined,
+                  label: 'Background',
+                  color: colors.tertiary,
+                  badge: _noteBgPresetId != null || _noteBgImagePath != null,
+                  onTap: () { Navigator.pop(context); _openEntryBgPicker(); },
+                ),
+                _SheetItem(
+                  icon: _pageLayout == _PageLayout.textOnly
+                      ? Icons.view_agenda_outlined
+                      : Icons.grid_view_rounded,
+                  label: 'Layout\n${_pageLayout.label}',
+                  color: colors.tertiary,
+                  onTap: () { Navigator.pop(context); _openLayoutPicker(); },
+                ),
+              ]),
+              const SizedBox(height: 12),
+
+              // HELP
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.help_outline, color: colors.outline),
+                title: Text('Formatting guide',
+                    style: TextStyle(color: colors.onSurface, fontSize: 14)),
+                trailing: Icon(Icons.chevron_right, color: colors.outline),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showFormattingHelp(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
@@ -499,163 +617,95 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
           onSubmitted: (_) => _autoSave(),
         ),
         actions: [
-          // ── Voice note (prominently visible — easy one-tap access) ──
-          IconButton(
-            icon: Icon(Icons.mic_rounded, color: colors.primary),
-            tooltip: 'Voice note',
-            onPressed: _openAudioRecorder,
-          ),
-          // ── Emoji picker (frequently used — stays visible) ──
-          IconButton(
-            icon: Icon(Icons.emoji_emotions_outlined, color: colors.primary),
-            tooltip: 'Insert emoji',
-            onPressed: _openEmojiPicker,
-          ),
-          // ── Font picker (per-note font — stays visible) ──
-          IconButton(
-            icon: Icon(Icons.text_fields_rounded, color: colors.primary),
-            tooltip: 'Font: ${_currentFont.label}',
-            onPressed: _openFontPicker,
-          ),
-          // ── Insert / tools overflow menu ──
-          PopupMenuButton<_EditorAction>(
-            icon: Icon(Icons.add_circle_outline, color: colors.primary),
-            tooltip: 'More',
-            onSelected: (action) {
-              switch (action) {
-                case _EditorAction.sticker:
-                  _openStickerPanel();
-                case _EditorAction.gif:
-                  _openGifPicker();
-                case _EditorAction.drawing:
-                  _openDrawingCanvas();
-                case _EditorAction.layout:
-                  _openLayoutPicker();
-                case _EditorAction.toggleToolbar:
-                  setState(() => _advancedToolbar = !_advancedToolbar);
-                case _EditorAction.help:
-                  _showFormattingHelp(context);
-                case _EditorAction.entryBg:
-                  _openEntryBgPicker();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: _EditorAction.layout,
-                child: ListTile(
-                  leading: Icon(_pageLayout == _PageLayout.textOnly
-                      ? Icons.view_agenda_outlined
-                      : Icons.grid_view_rounded),
-                  title: Text('Layout: ${_pageLayout.label}'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: _EditorAction.sticker,
-                child: ListTile(
-                  leading: Icon(Icons.auto_awesome_outlined),
-                  title: Text('Insert sticker'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: _EditorAction.gif,
-                child: ListTile(
-                  leading: Icon(Icons.gif_box_outlined),
-                  title: Text('Insert GIF'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: _EditorAction.drawing,
-                child: ListTile(
-                  leading: Icon(Icons.draw_outlined),
-                  title: Text('Insert drawing'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              PopupMenuItem(
-                value: _EditorAction.toggleToolbar,
-                child: ListTile(
-                  leading: Icon(_advancedToolbar
-                      ? Icons.expand_less
-                      : Icons.expand_more),
-                  title: Text(_advancedToolbar
-                      ? 'Basic toolbar'
-                      : 'Advanced toolbar'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: _EditorAction.help,
-                child: ListTile(
-                  leading: Icon(Icons.help_outline),
-                  title: Text('Formatting guide'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: _EditorAction.entryBg,
-                child: ListTile(
-                  leading: Icon(Icons.wallpaper_outlined),
-                  title: Text('Entry background'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
-          ),
+          // Subtle autosave indicator
           if (_isSaving)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.only(right: 4),
               child: Center(
                 child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.8),
                 ),
               ),
             ),
+          // Single ⊕ button — opens the organized insert & style sheet
+          IconButton(
+            icon: Icon(Icons.add_circle_outline, color: colors.primary),
+            tooltip: 'Insert & style',
+            onPressed: () => _showInsertSheet(context),
+          ),
           TextButton(
             onPressed: _onDone,
             child: const Text('Done'),
           ),
         ],
       ),
-      body: AppBackgroundWrapper(
+      body: _EditorBackgroundWrapper(
+        noteBgPresetId: _noteBgPresetId,
+        noteBgImagePath: _noteBgImagePath,
         child: !_editorReady
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // ── Quill Toolbar ──
-                // Basic: B / I / U / H — just the essentials.
-                // Advanced: full palette revealed via overflow menu toggle.
-                QuillSimpleToolbar(
-                  controller: _controller!,
-                  config: QuillSimpleToolbarConfig(
-                    showFontFamily: false,
-                    showFontSize: false,
-                    showBackgroundColorButton: _advancedToolbar,
-                    showClearFormat: _advancedToolbar,
-                    showColorButton: _advancedToolbar,
-                    showBoldButton: true,
-                    showItalicButton: true,
-                    showUnderLineButton: true,
-                    showStrikeThrough: _advancedToolbar,
-                    showHeaderStyle: true,
-                    showListNumbers: _advancedToolbar,
-                    showListBullets: _advancedToolbar,
-                    showQuote: _advancedToolbar,
-                    showAlignmentButtons: _advancedToolbar,
-                    showCodeBlock: false,
-                    showInlineCode: false,
-                    showLink: _advancedToolbar,
-                    showSearchButton: false,
-                    showSubscript: false,
-                    showSuperscript: false,
-                    showIndent: _advancedToolbar,
-                    showUndo: _advancedToolbar,
-                    showRedo: _advancedToolbar,
-                  ),
+                // ── Minimal formatting toolbar + expand/collapse toggle ──
+                // Shows B/I/U/H always. Chevron at right reveals advanced options.
+                Row(
+                  children: [
+                    Expanded(
+                      child: QuillSimpleToolbar(
+                        controller: _controller!,
+                        config: QuillSimpleToolbarConfig(
+                          showFontFamily: false,
+                          showFontSize: false,
+                          showBackgroundColorButton: _advancedToolbar,
+                          showClearFormat: _advancedToolbar,
+                          showColorButton: _advancedToolbar,
+                          showBoldButton: true,
+                          showItalicButton: true,
+                          showUnderLineButton: true,
+                          showStrikeThrough: _advancedToolbar,
+                          showHeaderStyle: true,
+                          showListNumbers: _advancedToolbar,
+                          showListBullets: _advancedToolbar,
+                          showQuote: _advancedToolbar,
+                          showAlignmentButtons: _advancedToolbar,
+                          showCodeBlock: false,
+                          showInlineCode: false,
+                          showLink: _advancedToolbar,
+                          showSearchButton: false,
+                          showSubscript: false,
+                          showSuperscript: false,
+                          showIndent: _advancedToolbar,
+                          showUndo: _advancedToolbar,
+                          showRedo: _advancedToolbar,
+                        ),
+                      ),
+                    ),
+                    // Expand/collapse formatting options
+                    Tooltip(
+                      message: _advancedToolbar
+                          ? 'Less formatting'
+                          : 'More formatting',
+                      child: InkWell(
+                        onTap: () =>
+                            setState(() => _advancedToolbar = !_advancedToolbar),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          child: Icon(
+                            _advancedToolbar
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            size: 20,
+                            color: _advancedToolbar
+                                ? colors.primary
+                                : colors.outline,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const Divider(height: 1),
 
@@ -716,9 +766,167 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
 }
 
 // ─────────────────────────────────────────────
-// Editor overflow-menu actions
+// Insert sheet helper widgets
 // ─────────────────────────────────────────────
-enum _EditorAction { layout, sticker, gif, drawing, toggleToolbar, help, entryBg }
+class _SheetSection extends StatelessWidget {
+  final String label;
+  final ColorScheme colors;
+  const _SheetSection({required this.label, required this.colors});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.3,
+            color: colors.outline,
+          ),
+        ),
+      );
+}
+
+class _SheetRow extends StatelessWidget {
+  final List<Widget> children;
+  const _SheetRow({required this.children});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: children.map((c) => Expanded(child: c)).toList(),
+      );
+}
+
+class _SheetItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool badge;
+
+  const _SheetItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.badge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                ),
+                if (badge)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: colors.onSurface,
+                  height: 1.3),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Editor background wrapper — applies note-specific bg immediately on change.
+// Falls back to the global AppBackground when no note override is set.
+// ─────────────────────────────────────────────
+class _EditorBackgroundWrapper extends ConsumerWidget {
+  final String? noteBgPresetId;
+  final String? noteBgImagePath;
+  final Widget child;
+
+  const _EditorBackgroundWrapper({
+    required this.noteBgPresetId,
+    required this.noteBgImagePath,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final globalBg = ref.watch(backgroundProvider);
+    final effective = resolveNoteBackground(
+      noteBgPresetId: noteBgPresetId,
+      noteBgImagePath: noteBgImagePath,
+      journalOrGlobalBackground: globalBg,
+    );
+
+    switch (effective.type) {
+      case AppBackgroundType.image:
+        if (effective.imagePath != null && File(effective.imagePath!).existsSync()) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.file(File(effective.imagePath!), fit: BoxFit.cover),
+              Container(color: Colors.black.withValues(alpha: 0.12)),
+              child,
+            ],
+          );
+        }
+        return AppBackgroundWrapper(child: child);
+      case AppBackgroundType.gradient:
+        final gradColors = effective.gradientColors ??
+            [const Color(0xFFF9F7F4), const Color(0xFFEEEEEE)];
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradColors,
+            ),
+          ),
+          child: child,
+        );
+      case AppBackgroundType.color:
+        return Container(
+          color: effective.color ?? const Color(0xFFF9F7F4),
+          child: child,
+        );
+    }
+  }
+}
+
 
 // ─────────────────────────────────────────────
 // Page Layout enum

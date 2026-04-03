@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -118,28 +117,6 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                   ),
                 ],
 
-                // DEV ONLY — shown in debug builds only, invisible in release.
-                // kDebugMode is a Flutter constant that is false in release builds,
-                // so this entire block is compiled out in production.
-                if (kDebugMode) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await ref.read(appLockProvider.notifier).unlockDev();
-                        if (context.mounted) context.go('/home');
-                      },
-                      icon: const Icon(Icons.developer_mode, size: 18),
-                      label: const Text('Dev: Skip Auth (emulator only)'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.orange,
-                        side: const BorderSide(color: Colors.orange),
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),

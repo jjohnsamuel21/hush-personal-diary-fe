@@ -365,18 +365,38 @@ class _SharedNoteEditorScreenState
                       width: double.infinity,
                       color: colors.tertiaryContainer.withValues(alpha: 0.6),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
+                          horizontal: 16, vertical: 4),
                       child: Row(
                         children: [
                           Icon(Icons.cloud_off_outlined,
                               size: 14,
                               color: colors.onTertiaryContainer),
                           const SizedBox(width: 6),
-                          Text(
-                            'Saved locally — will sync when online',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: colors.onTertiaryContainer),
+                          Expanded(
+                            child: Text(
+                              'Not synced — sign in with Google and tap Sync',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.onTertiaryContainer),
+                            ),
+                          ),
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: _isSaving ? null : () async {
+                              setState(() => _isSaving = true);
+                              await _save();
+                              if (mounted) setState(() => _isSaving = false);
+                            },
+                            child: Text('Sync',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.onTertiaryContainer,
+                                    fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),

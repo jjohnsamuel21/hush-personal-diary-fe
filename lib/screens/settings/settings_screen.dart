@@ -210,6 +210,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
             const SizedBox(height: 28),
 
+            // ── Help & Guide ───────────────────────────────────────────────
+            _ActionTile(
+              icon: Icons.menu_book_rounded,
+              title: 'Help & Guide',
+              subtitle: 'Learn every feature — from writing to sharing',
+              loading: false,
+              onTap: () => context.push('/settings/guide'),
+            ),
+            const SizedBox(height: 20),
+
             // ── Activity Log ───────────────────────────────────────────────
             _Label(text: 'Activity Log'),
             const SizedBox(height: 8),

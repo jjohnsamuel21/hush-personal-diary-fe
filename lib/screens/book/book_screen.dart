@@ -107,7 +107,12 @@ class _BookScreenState extends ConsumerState<BookScreen>
       folder = await FolderService.getFolderById(widget.folderId!);
     }
 
-    final notes = await NoteService.getNotes(folderId: widget.folderId);
+    // Oldest-first = natural reading order (Entry 1, 2, 3…).
+    final rawNotes = await NoteService.getNotes(
+        folderId: widget.folderId,
+        sortOrder: NoteSortOrder.createdAt);
+    // getNotes returns newest-first; reverse for book reading order.
+    final notes = rawNotes.reversed.toList();
     final entries = <({Note note, Document doc})>[];
 
     for (final note in notes) {
@@ -443,11 +448,16 @@ class _BookScreenState extends ConsumerState<BookScreen>
                   tooltip: 'Edit entry',
                   onPressed: () async {
                     final note = _entries[_entryIndex].note;
+                    final savedPage = _pageIndex;
                     await context.push(
                         '/editor?noteId=${note.id}&folderId=${note.folderId}');
                     if (mounted) {
-                      setState(() { _loading = true; _pageIndex = 0; });
-                      _loadAndDecrypt();
+                      setState(() => _loading = true);
+                      await _loadAndDecrypt();
+                      // Return to the same entry page after editing.
+                      if (mounted && savedPage < _totalPages) {
+                        _pageController.jumpToPage(savedPage);
+                      }
                     }
                   },
                 ),
@@ -458,8 +468,12 @@ class _BookScreenState extends ConsumerState<BookScreen>
                   await context.push(
                       '/editor?folderId=${widget.folderId ?? 0}');
                   if (mounted) {
-                    setState(() { _loading = true; _pageIndex = 0; });
-                    _loadAndDecrypt();
+                    // Reload and jump to the last page (the new entry).
+                    setState(() => _loading = true);
+                    await _loadAndDecrypt();
+                    if (mounted && _totalPages > 0) {
+                      _pageController.jumpToPage(_totalPages - 1);
+                    }
                   }
                 },
               ),

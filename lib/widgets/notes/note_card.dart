@@ -83,6 +83,7 @@ class NoteCard extends ConsumerWidget {
   void _showContextMenu(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -280,25 +281,49 @@ class _NoteContextMenu extends ConsumerWidget {
     List<Folder> folders,
     NotesNotifier notifier,
   ) {
+    final colors = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
-      builder: (_) => SafeArea(
+      backgroundColor: colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Move to…',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.drive_file_move_outlined, color: colors.primary),
+                  const SizedBox(width: 12),
+                  Text('Move to journal',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: colors.onSurface)),
+                ],
+              ),
             ),
+            const Divider(height: 1),
             ...folders.map((f) => ListTile(
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(f.name),
+                  leading: Icon(Icons.folder_outlined, color: colors.onSurface),
+                  title: Text(f.name,
+                      style: TextStyle(color: colors.onSurface)),
                   onTap: () async {
                     final targetId = f.id;
                     if (targetId == null) return;
-                    Navigator.pop(context);
+                    Navigator.pop(sheetCtx);
                     await notifier.moveToFolder(note, targetId);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Moved to "${f.name}"'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   },
                 )),
             const SizedBox(height: 8),

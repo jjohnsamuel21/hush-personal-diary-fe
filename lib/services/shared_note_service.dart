@@ -234,6 +234,12 @@ class SharedNoteService {
 
   /// Permanently deletes a shared note (owner only).
   static Future<bool> deleteNote(String noteId) async {
+    // Local-only notes never reached the server — just wipe from cache.
+    if (noteId.startsWith('local_')) {
+      await _removeFromCache(noteId);
+      return true;
+    }
+
     final headers = await _authHeaders();
     try {
       final response = await http.delete(

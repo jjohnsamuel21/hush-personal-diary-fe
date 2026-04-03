@@ -208,9 +208,10 @@ class _SharedNoteCard extends ConsumerWidget {
   void _showOptions(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _SharedNoteOptions(note: note, ref: ref),
+      builder: (ctx) => _SharedNoteOptions(note: note, ref: ref),
     );
   }
 
@@ -261,13 +262,25 @@ class _SharedNoteOptions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Drag handle
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: colors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
           ListTile(
-            leading: const Icon(Icons.edit_outlined),
-            title: const Text('Open'),
+            leading: Icon(Icons.edit_outlined, color: colors.onSurface),
+            title: Text('Open', style: TextStyle(color: colors.onSurface)),
             onTap: () {
               Navigator.pop(context);
               context.push('/shared/editor?noteId=${note.id}');
@@ -275,19 +288,17 @@ class _SharedNoteOptions extends ConsumerWidget {
           ),
           if (note.isOwner) ...[
             ListTile(
-              leading: const Icon(Icons.people_outline),
-              title: const Text('Manage collaborators'),
+              leading: Icon(Icons.people_outline, color: colors.onSurface),
+              title: Text('Manage collaborators',
+                  style: TextStyle(color: colors.onSurface)),
               onTap: () {
                 Navigator.pop(context);
                 context.push('/shared/manage?noteId=${note.id}');
               },
             ),
             ListTile(
-              leading: Icon(Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.error),
-              title: Text('Delete',
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.error)),
+              leading: Icon(Icons.delete_outline, color: colors.error),
+              title: Text('Delete', style: TextStyle(color: colors.error)),
               onTap: () async {
                 Navigator.pop(context);
                 final ok = await ref
@@ -302,11 +313,11 @@ class _SharedNoteOptions extends ConsumerWidget {
             ),
           ] else ...[
             ListTile(
-              leading: const Icon(Icons.exit_to_app_outlined),
-              title: const Text('Leave shared note'),
+              leading: Icon(Icons.exit_to_app_outlined, color: colors.onSurface),
+              title: Text('Leave shared note',
+                  style: TextStyle(color: colors.onSurface)),
               onTap: () async {
                 Navigator.pop(context);
-                // Find the user's own share row
                 final myShare = note.collaborators.firstWhere(
                   (c) => c.status == 'accepted',
                   orElse: () => note.collaborators.first,
@@ -317,6 +328,7 @@ class _SharedNoteOptions extends ConsumerWidget {
               },
             ),
           ],
+          const SizedBox(height: 8),
         ],
       ),
     );
