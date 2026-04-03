@@ -203,9 +203,12 @@ class _SharedNoteEditorScreenState
 
   Future<void> _autoSave() async {
     if (_isSaving || _controller == null) return;
-    setState(() => _isSaving = true);
-    await _save();
-    if (mounted) setState(() => _isSaving = false);
+    if (mounted) setState(() => _isSaving = true);
+    try {
+      await _save();
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   Future<void> _save() async {
@@ -259,7 +262,9 @@ class _SharedNoteEditorScreenState
 
   Future<void> _onDone() async {
     _debounceTimer?.cancel();
-    await _save();
+    try {
+      await _save();
+    } catch (_) {}
     if (mounted) context.pop();
   }
 
@@ -318,7 +323,12 @@ class _SharedNoteEditorScreenState
     // Other editors minus self (presence list includes self).
     final others = _onlineUsers.where((u) => u.id != _note?.ownerEmail).toList();
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) await _onDone();
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -510,7 +520,15 @@ class _SharedNoteEditorScreenState
 
                   // ── Quill toolbar ────────────────────────────────────────
                   if (!readOnly)
-                    QuillSimpleToolbar(
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        canvasColor: colors.surface,
+                        textTheme: Theme.of(context).textTheme.apply(
+                          bodyColor: colors.onSurface,
+                          displayColor: colors.onSurface,
+                        ),
+                      ),
+                    child: QuillSimpleToolbar(
                       controller: _controller!,
                       config: QuillSimpleToolbarConfig(
                         showFontFamily: false,
@@ -538,6 +556,7 @@ class _SharedNoteEditorScreenState
                         showRedo: _advancedToolbar,
                       ),
                     ),
+                    ), // Theme
                   if (!readOnly) const Divider(height: 1),
 
                   // ── Editor body ──────────────────────────────────────────
@@ -585,6 +604,7 @@ class _SharedNoteEditorScreenState
                 ],
               ),
       ),
+    ), // PopScope
     );
   }
 }

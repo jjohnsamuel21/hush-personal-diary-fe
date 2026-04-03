@@ -151,9 +151,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
 
   Future<void> _autoSave() async {
     if (_isSaving || _controller == null) return;
-    setState(() => _isSaving = true);
-    await _save();
-    if (mounted) setState(() => _isSaving = false);
+    if (mounted) setState(() => _isSaving = true);
+    try {
+      await _save();
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   Future<void> _save() async {
@@ -214,9 +217,26 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     ref.invalidate(foldersProvider);
   }
 
+  /// Saves immediately, bypassing the _isSaving guard.
+  /// Used for metadata changes (background, font, layout) that must persist
+  /// even if an auto-save is already in flight.
+  Future<void> _saveBackground() async {
+    _debounceTimer?.cancel();
+    try {
+      await _save();
+    } catch (_) {}
+    _debounceTimer = Timer(
+      const Duration(milliseconds: AppConstants.autoSaveDebounceMs),
+      _autoSave,
+    );
+  }
+
   Future<void> _onDone() async {
     _debounceTimer?.cancel();
-    await _save();
+    // Save regardless of _isSaving — we're leaving the screen.
+    try {
+      await _save();
+    } catch (_) {}
     if (mounted) context.pop();
   }
 
@@ -379,7 +399,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             _noteBgPresetId = presetId;
             _noteBgImagePath = null;
           });
-          _autoSave();
+          _saveBackground();
         },
         onImage: (path) {
           Navigator.pop(context);
@@ -387,7 +407,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             _noteBgImagePath = path;
             _noteBgPresetId = null;
           });
-          _autoSave();
+          _saveBackground();
         },
         onClear: () {
           Navigator.pop(context);
@@ -395,7 +415,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             _noteBgPresetId = null;
             _noteBgImagePath = null;
           });
-          _autoSave();
+          _saveBackground();
         },
       ),
     );
@@ -471,12 +491,16 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: colors.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20, 12, 20,
+            MediaQuery.of(context).viewInsets.bottom + 12,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,7 +620,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) await _onDone();
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -646,9 +675,19 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               children: [
                 // ── Minimal formatting toolbar + expand/collapse toggle ──
                 // Shows B/I/U/H always. Chevron at right reveals advanced options.
+                // The Theme override forces dropdown popups to use surface colors
+                // so text is always readable regardless of app theme / background.
                 Row(
                   children: [
                     Expanded(
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          canvasColor: colors.surface,
+                          textTheme: Theme.of(context).textTheme.apply(
+                            bodyColor: colors.onSurface,
+                            displayColor: colors.onSurface,
+                          ),
+                        ),
                       child: QuillSimpleToolbar(
                         controller: _controller!,
                         config: QuillSimpleToolbarConfig(
@@ -677,6 +716,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                           showRedo: _advancedToolbar,
                         ),
                       ),
+                      ), // Theme
                     ),
                     // Expand/collapse formatting options
                     Tooltip(
@@ -757,6 +797,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               ],
             ),
       ),
+    ), // PopScope
     );
   }
 }

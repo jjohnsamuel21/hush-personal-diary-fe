@@ -10,7 +10,7 @@ class SharedNotesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notesAsync = ref.watch(sharedNotesProvider);
+    final notesAsync = ref.watch(sharedNotesNotifierProvider);
     final invitesAsync = ref.watch(invitesProvider);
     final colors = Theme.of(context).colorScheme;
 
@@ -65,7 +65,7 @@ class SharedNotesScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: () =>
-                            ref.invalidate(sharedNotesProvider),
+                            ref.invalidate(sharedNotesNotifierProvider),
                         child: const Text('Retry'),
                       ),
                     ],

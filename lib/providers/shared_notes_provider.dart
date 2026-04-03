@@ -75,12 +75,17 @@ class SharedNotesNotifier
   }
 
   Future<bool> deleteNote(String noteId) async {
+    // Optimistic remove — UI updates instantly before server confirms.
+    final previous = state.valueOrNull ?? [];
+    state = AsyncValue.data(previous.where((n) => n.id != noteId).toList());
+
     final ok = await SharedNoteService.deleteNote(noteId);
-    if (ok) {
-      // Remove from state immediately.
-      final current = state.valueOrNull ?? [];
-      state = AsyncValue.data(current.where((n) => n.id != noteId).toList());
+    if (!ok) {
+      // Rollback on failure.
+      state = AsyncValue.data(previous);
     }
+    // Keep sharedNotesProvider in sync.
+    _ref.invalidate(sharedNotesProvider);
     return ok;
   }
 

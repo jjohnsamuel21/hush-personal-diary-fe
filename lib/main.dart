@@ -15,6 +15,8 @@ import 'router/app_router.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
+  // Increase image cache to 150 MB so GIFs and backgrounds don't get evicted.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
   await IsarService.init();
   await ReminderService.init();
   await SecurityService.init();

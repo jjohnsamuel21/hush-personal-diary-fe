@@ -23,13 +23,17 @@ class GiphyGif {
 
   factory GiphyGif.fromJson(Map<String, dynamic> json) {
     final images = json['images'] as Map<String, dynamic>;
+    // Preview: small WebP thumbnail for the grid
     final preview = images['fixed_width_small'] as Map<String, dynamic>;
-    final original = images['original'] as Map<String, dynamic>;
+    // Embed: downsized_medium is capped at 5 MB and always animated.
+    // Prefer over 'original' which can be 20+ MB and cause loading hangs.
+    final embed = (images['downsized_medium'] as Map<String, dynamic>?)
+                ?? (images['fixed_width'] as Map<String, dynamic>);
     return GiphyGif(
       id: json['id'] as String,
       title: (json['title'] as String?) ?? '',
       previewUrl: (preview['webp'] ?? preview['url']) as String,
-      originalUrl: original['url'] as String,
+      originalUrl: embed['url'] as String,
     );
   }
 }

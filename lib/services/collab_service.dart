@@ -68,6 +68,7 @@ class CollabService {
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _sub;
+  Timer? _pingTimer;
   bool _disposed = false;
 
   // ── Derived collaborator state ────────────────────────────────────────────
@@ -96,6 +97,10 @@ class CollabService {
         onDone: _onDisconnected,
         cancelOnError: false,
       );
+      // Keepalive ping every 25s — Railway closes idle WS after ~30s.
+      _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+        _send({'type': 'ping'});
+      });
     } catch (_) {
       // Backend unreachable — editor still works via HTTP auto-save.
       _channel = null;
@@ -103,12 +108,14 @@ class CollabService {
   }
 
   void _onDisconnected() {
+    _pingTimer?.cancel();
     _channel = null;
   }
 
   /// Closes the WebSocket. Call from the editor's dispose().
   Future<void> disconnect() async {
     _disposed = true;
+    _pingTimer?.cancel();
     await _sub?.cancel();
     await _channel?.sink.close();
     _channel = null;
