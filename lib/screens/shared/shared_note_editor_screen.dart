@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/font_constants.dart';
@@ -101,7 +102,7 @@ class _SharedNoteEditorScreenState
     // Subscribe to document delta stream to send live ops over WebSocket.
     _docChangeSub = controller.document.changes.listen((event) {
       if (_applyingRemote || event.source == ChangeSource.remote) return;
-      _collab?.sendDelta(event.change);
+      _collab?.sendDelta(event.change.toJson());
     });
 
     if (!mounted) { controller.dispose(); return; }

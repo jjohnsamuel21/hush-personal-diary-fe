@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'auth_service.dart';
 
@@ -119,8 +118,9 @@ class CollabService {
   // ── Send ──────────────────────────────────────────────────────────────────
 
   /// Broadcasts local Quill Delta ops to all other editors of this note.
-  void sendDelta(Delta delta) {
-    _send({'type': 'delta', 'ops': delta.toJson()});
+  /// [ops] is the result of calling `delta.toJson()` on the local change.
+  void sendDelta(List<dynamic> ops) {
+    _send({'type': 'delta', 'ops': ops});
   }
 
   /// Broadcasts the local cursor/selection position.
